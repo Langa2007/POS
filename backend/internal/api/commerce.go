@@ -91,6 +91,9 @@ func (s *Server) createItem(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
+		if err = publishCatalogItemChange(r, tx, scope.TenantID, itemID); err != nil {
+			return err
+		}
 		if input.StockOnHand > 0 {
 			movementID, _ := ids.NewUUIDv7()
 			if _, err = tx.Exec(r.Context(), `INSERT INTO stock_movements(id,tenant_id,item_id,quantity_delta,reason) VALUES($1,$2,$3,$4,'opening_balance')`, movementID, scope.TenantID, itemID, input.StockOnHand); err != nil {
@@ -213,6 +216,9 @@ func (s *Server) createSale(w http.ResponseWriter, r *http.Request) {
 			if _, err := tx.Exec(r.Context(), `INSERT INTO stock_movements(id,tenant_id,item_id,quantity_delta,reason,reference_id) VALUES($1,$2,$3,$4,'sale',$5)`, movementID, scope.TenantID, item.id, -item.qty, saleID); err != nil {
 				return err
 			}
+			if err := publishCatalogItemChange(r, tx, scope.TenantID, item.id); err != nil {
+				return err
+			}
 		}
 		if method == "cash" {
 			tenderID, _ := ids.NewUUIDv7()
@@ -255,6 +261,17 @@ func (s *Server) createSale(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 201, map[string]any{"sale_id": saleID, "payment_reference": paymentReference, "status": saleStatus})
 }
 
+func publishCatalogItemChange(r *http.Request, tx pgx.Tx, tenantID, itemID string) error {
+	var id, name, sku, barcode, currency, kind string
+	var price, stock, reorder int64
+	if err := tx.QueryRow(r.Context(), `SELECT id::text,name,sku,COALESCE(barcode,''),currency,kind,price_minor,stock_on_hand,reorder_level FROM catalog_items WHERE tenant_id=$1 AND id=$2`, tenantID, itemID).Scan(&id, &name, &sku, &barcode, &currency, &kind, &price, &stock, &reorder); err != nil {
+		return err
+	}
+	payload := map[string]any{"id": id, "name": name, "sku": sku, "barcode": barcode, "currency": strings.TrimSpace(currency), "kind": kind, "price_minor": price, "stock_on_hand": stock, "reorder_level": reorder}
+	_, err := tx.Exec(r.Context(), `INSERT INTO sync_changes(tenant_id,entity_type,entity_id,operation,payload) VALUES($1,'master.catalog_item',$2,'update',$3)`, tenantID, itemID, mustJSON(payload))
+	return err
+}
+
 func newPaymentReference() (string, error) {
 	b := make([]byte, 6)
 	if _, err := rand.Read(b); err != nil {
@@ -278,22 +295,22 @@ func (s *Server) openShift(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	shiftID, _ := ids.NewUUIDv7()
+	branchID := input.BranchID
 	err = s.db.TenantTx(r.Context(), scope.TenantID, func(tx pgx.Tx) error {
-		branch := input.BranchID
-		if branch == "" {
-			branch = scope.BranchID
+		if branchID == "" {
+			branchID = scope.BranchID
 		}
-		if branch == "" {
-			_ = tx.QueryRow(r.Context(), `SELECT id::text FROM branches WHERE tenant_id=$1 ORDER BY created_at LIMIT 1`, scope.TenantID).Scan(&branch)
+		if branchID == "" {
+			_ = tx.QueryRow(r.Context(), `SELECT id::text FROM branches WHERE tenant_id=$1 ORDER BY created_at LIMIT 1`, scope.TenantID).Scan(&branchID)
 		}
-		_, err := tx.Exec(r.Context(), `INSERT INTO shifts(id,tenant_id,branch_id,user_id,opening_float_minor,status) VALUES($1,$2,$3,$4,$5,'open')`, shiftID, scope.TenantID, branch, scope.UserID, input.OpeningFloatMinor)
+		_, err := tx.Exec(r.Context(), `INSERT INTO shifts(id,tenant_id,branch_id,user_id,opening_float_minor,status) VALUES($1,$2,$3,$4,$5,'open')`, shiftID, scope.TenantID, branchID, scope.UserID, input.OpeningFloatMinor)
 		return err
 	})
 	if err != nil {
 		writeError(w, 400, "shift.open_failed", "An open shift already exists or branch is invalid")
 		return
 	}
-	writeJSON(w, 201, map[string]any{"shift_id": shiftID, "status": "open"})
+	writeJSON(w, 201, map[string]any{"shift_id": shiftID, "branch_id": branchID, "status": "open"})
 }
 
 func (s *Server) closeShift(w http.ResponseWriter, r *http.Request) {

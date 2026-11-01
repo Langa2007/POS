@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pos.local/contracts/sync/sync.schema.json",
+  "title": "Terminal sync operation",
+  "type": "object",
+  "required": ["client_id", "entity_type", "entity_id", "operation", "client_occurred_at"],
+  "properties": {
+    "client_id": { "type": "string", "minLength": 1 },
+    "terminal_id": { "type": "string", "format": "uuid" },
+    "entity_type": { "type": "string", "minLength": 1 },
+    "entity_id": { "type": "string", "minLength": 1 },
+    "operation": { "enum": ["create", "update", "delete"] },
+    "payload": { "type": "object" },
+    "client_occurred_at": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false
+}

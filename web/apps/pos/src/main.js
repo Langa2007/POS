@@ -12,3 +12,6 @@ const i18n = createI18n({ legacy: false, locale: 'en', fallbackLocale: 'en', mes
 } })
 const router = createRouter({ history: createWebHistory(), routes: [{ path: '/:pathMatch(.*)*', component: App }] })
 createApp({ render: () => h(RouterView) }).use(createPinia()).use(router).use(i18n).mount('#app')
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => undefined))
+}

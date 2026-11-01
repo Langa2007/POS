@@ -406,6 +406,57 @@ paths:
       security: [{ bearerAuth: [] }]
       responses:
         '200': { description: Reconciliation result }
+  /sync/push:
+    post:
+      operationId: pushOfflineOperations
+      summary: Push an idempotent terminal outbox batch
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [operations]
+              properties:
+                operations: { type: array, minItems: 1, maxItems: 1000, items: { $ref: '#/components/schemas/SyncOperation' } }
+      responses:
+        '200': { description: Per-operation acknowledgements }
+  /sync/policy:
+    get:
+      operationId: getOfflineSyncPolicy
+      summary: Read tenant offline checkout limits
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Offline duration, amount, and stock policy }
+    put:
+      operationId: updateOfflineSyncPolicy
+      summary: Configure tenant offline checkout limits
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [max_offline_hours, max_sale_minor, allow_negative_stock]
+              properties:
+                max_offline_hours: { type: integer, minimum: 1, maximum: 168 }
+                max_sale_minor: { type: integer, minimum: 1 }
+                allow_negative_stock: { type: boolean }
+      responses:
+        '200': { description: Saved offline policy }
+        '400': { description: Invalid policy }
+  /sync/pull:
+    get:
+      operationId: pullOfflineChanges
+      summary: Pull tenant changes after a cursor
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: cursor, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 1000, default: 500 } }
+      responses:
+        '200': { description: Ordered changes and next cursor }
         '400': { description: Invalid JSON or CSV statement }
 components:
   securitySchemes:
@@ -457,6 +508,17 @@ components:
         method: { type: string, enum: [cash, mpesa_stk, mpesa_c2b, credit] }
         amount_minor: { type: integer, minimum: 1 }
         reference: { type: string }
+    SyncOperation:
+      type: object
+      required: [client_id, entity_type, entity_id, operation, payload, client_occurred_at]
+      properties:
+        client_id: { type: string, format: uuid }
+        terminal_id: { type: string, format: uuid }
+        entity_type: { type: string, minLength: 1 }
+        entity_id: { type: string, format: uuid }
+        operation: { type: string, enum: [create, update, delete] }
+        payload: { type: object }
+        client_occurred_at: { type: string, format: date-time }
     TokenPair:
       type: object
       required: [access_token, refresh_token, token_type, expires_in]

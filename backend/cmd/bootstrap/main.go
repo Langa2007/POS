@@ -62,7 +62,7 @@ func main() {
 		if _, err := tx.Exec(ctx, `INSERT INTO user_roles(tenant_id,user_id,role_id) VALUES($1,$2,$3)`, tenantID, userID, roleID); err != nil {
 			return err
 		}
-		permissions := []string{"core.*", "users.manage", "settings.manage", "terminals.register", "catalog.read", "catalog.manage", "sales.create", "sales.shift", "reports.read", "payments.create", "payments.read", "payments.manage", "payments.refund", "payments.reconcile", "ledger.read"}
+		permissions := []string{"core.*", "users.manage", "settings.manage", "terminals.register", "catalog.read", "catalog.manage", "sales.create", "sales.shift", "reports.read", "payments.create", "payments.read", "payments.manage", "payments.refund", "payments.refund.approve", "payments.reconcile", "ledger.read", "sync.push", "sync.pull", "sync.policy.read", "sync.policy.manage"}
 		for _, permission := range permissions {
 			if _, err := tx.Exec(ctx, `INSERT INTO permissions(id,description) VALUES($1,'System permission') ON CONFLICT (id) DO NOTHING`, permission); err != nil {
 				return err
