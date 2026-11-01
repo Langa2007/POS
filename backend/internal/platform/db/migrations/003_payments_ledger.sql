@@ -85,6 +85,7 @@ CREATE TABLE IF NOT EXISTS ledger_accounts (
   code text NOT NULL,
   name text NOT NULL,
   account_type text NOT NULL CHECK (account_type IN ('asset','liability','equity','revenue','expense')),
+  UNIQUE (tenant_id, id),
   UNIQUE (tenant_id, code)
 );
 CREATE TABLE IF NOT EXISTS ledger_journals (
