@@ -1,0 +1,52 @@
+name: CI
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: pos
+          POSTGRES_USER: pos
+          POSTGRES_PASSWORD: pos-local-only
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U pos -d pos"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Create restricted app role
+        run: |
+          psql -h localhost -U pos -d pos -c "CREATE ROLE pos_app LOGIN PASSWORD 'pos-app-local-only'"
+          psql -h localhost -U pos -d pos -c 'GRANT CONNECT, CREATE ON DATABASE pos TO pos_app'
+          psql -h localhost -U pos -d pos -c 'GRANT USAGE, CREATE ON SCHEMA public TO pos_app'
+        env:
+          PGPASSWORD: pos-local-only
+      - run: go test -race ./...
+        env:
+          TEST_DATABASE_URL: postgres://pos_app:pos-app-local-only@localhost:5432/pos?sslmode=disable
+      - run: go vet ./...
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.24.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - run: pnpm build

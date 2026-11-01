@@ -1,0 +1,37 @@
+version: '3'
+
+tasks:
+  bootstrap:
+    desc: Install web dependencies, start support services, and migrate the configured PostgreSQL database
+    cmds:
+      - test -f .env || cp .env.example .env
+      - corepack pnpm install
+      - sh -c '. ./scripts/env.sh; if [ -n "${DATABASE_URL_LOCAL:-}" ]; then docker compose -f deploy.compose.yml up -d --wait mailpit object-store; else docker compose -f deploy.compose.yml --profile localdb up -d --wait postgres mailpit object-store; fi'
+      - sh -c '. ./scripts/env.sh && go run ./backend/cmd/migrate'
+  dev:
+    desc: Start the API and Vue development servers
+    deps: [bootstrap]
+    cmds:
+      - sh -c '. ./scripts/env.sh; go run ./backend/cmd/api & api_pid=$!; trap "kill $api_pid" EXIT; corepack pnpm dev'
+  db:
+    desc: Start the bundled PostgreSQL service (set POSTGRES_PORT if the host port 5432 is already used)
+    cmds:
+      - docker compose -f deploy.compose.yml --profile localdb up -d --wait postgres
+  migrate:
+    desc: Apply database migrations
+    cmds:
+      - sh -c '. ./scripts/env.sh && go run ./backend/cmd/migrate'
+  api:
+    desc: Run the API server
+    cmds:
+      - sh -c '. ./scripts/env.sh && go run ./backend/cmd/api'
+  test:
+    desc: Run backend and frontend tests and build checks
+    cmds:
+      - sh -c '. ./scripts/env.sh; TEST_DATABASE_URL="$DATABASE_URL" go test -race ./...'
+      - corepack pnpm test
+      - corepack pnpm build
+  bootstrap-owner:
+    desc: Create the first tenant and owner account from .env settings
+    cmds:
+      - sh -c '. ./scripts/env.sh && go run ./backend/cmd/bootstrap'

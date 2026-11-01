@@ -1,0 +1,14 @@
+{
+  "identities": [
+    {
+      "name": "pos-local",
+      "credentials": [
+        {
+          "accessKey": "pos-local",
+          "secretKey": "local-object-storage-secret-change-me"
+        }
+      ],
+      "actions": ["Admin", "Read", "List", "Tagging", "Write"]
+    }
+  ]
+}

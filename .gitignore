@@ -1,0 +1,13 @@
+.env
+.env.*
+!.env.example
+node_modules/
+.pnpm-store/
+web/apps/*/dist/
+web/apps/*/node_modules/
+*.log
+coverage/
+
+PHASES.md
+STRUCTURE.md
+POSSYSTEM.md

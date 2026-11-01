@@ -1,0 +1,31 @@
+services:
+  postgres:
+    profiles: [localdb]
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: pos
+      POSTGRES_USER: pos
+      POSTGRES_PASSWORD: pos-local-only
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pos-postgres:/var/lib/postgresql/data
+      - ./deploy/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pos -d pos"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+  object-store:
+    image: chrislusf/seaweedfs:4.47
+    command: server -dir=/data -s3 -s3.port=9000 -s3.config=/etc/seaweedfs/s3.json -master.volumeSizeLimitMB=128
+    ports: ["127.0.0.1:9000:9000"]
+    volumes:
+      - pos-object-data:/data
+      - ./deploy/seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
+  mailpit:
+    image: axllent/mailpit:v1.27
+    ports: ["1025:1025", "8025:8025"]
+volumes:
+  pos-postgres:
+  pos-object-data:
