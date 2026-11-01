@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS payment_tenders (
   provider_reference text,
   idempotency_key text NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (tenant_id, id),
   FOREIGN KEY (tenant_id, sale_id) REFERENCES sales(tenant_id, id),
   FOREIGN KEY (tenant_id, intent_id) REFERENCES payment_intents(tenant_id, id)
 );
