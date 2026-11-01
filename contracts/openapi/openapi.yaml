@@ -158,10 +158,280 @@ paths:
                   navigation: { type: array, items: { type: object } }
         '401': { description: Authentication required }
         '403': { description: Permission denied }
+  /catalog/items:
+    get:
+      operationId: listCatalogItems
+      summary: Search active sellable items
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 1000, default: 100 } }
+      responses:
+        '200':
+          description: Catalog page
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/CatalogItem' } }
+                  next_cursor: { type: string, nullable: true }
+        '401': { description: Authentication required }
+    post:
+      operationId: createCatalogItem
+      summary: Create a catalog item and optional opening stock
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: '#/components/schemas/CatalogItemInput' } }
+      responses:
+        '201': { description: Item created }
+        '400': { description: Invalid item }
+  /shifts:
+    post:
+      operationId: openShift
+      summary: Open a cashier shift
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                branch_id: { type: string, format: uuid }
+                opening_float_minor: { type: integer, minimum: 0 }
+      responses:
+        '201': { description: Shift opened }
+        '400': { description: Shift already open or invalid branch }
+  /shifts/{shiftID}/close:
+    post:
+      operationId: closeShift
+      summary: Blind-close a cashier shift
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: shiftID, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: closing_cash_minor, in: query, required: true, schema: { type: integer, minimum: 0 } }
+      responses:
+        '200': { description: Shift closed with variance }
+        '400': { description: Invalid or already closed shift }
+  /sales:
+    post:
+      operationId: completeCashSale
+      summary: Atomically complete a cash sale
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 1 } }
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: '#/components/schemas/SaleInput' } }
+      responses:
+        '201': { description: Sale completed }
+        '400': { description: Invalid sale, insufficient stock, or no open shift }
+  /reports/daily:
+    get:
+      operationId: dailySalesReport
+      summary: Read today's sales summary
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Daily sales, item count, and total }
+  /sales/{saleID}/payments:
+    post:
+      operationId: allocateSalePayments
+      summary: Allocate a cash balance payment to an unpaid sale
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: saleID, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tenders]
+              properties:
+                tenders: { type: array, minItems: 1, items: { $ref: '#/components/schemas/Tender' } }
+      responses:
+        '201': { description: Payment allocation captured }
+        '400': { description: Invalid or unbalanced allocation }
+  /payments/intents:
+    post:
+      operationId: initiateMpesaPayment
+      summary: Initiate an idempotent M-Pesa STK payment intent
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sale_id, amount_minor, phone]
+              properties:
+                sale_id: { type: string, format: uuid }
+                amount_minor: { type: integer, minimum: 1 }
+                phone: { type: string }
+                account_reference: { type: string }
+      responses:
+        '201': { description: Payment intent created }
+  /payments/intents/{intentID}:
+    get:
+      operationId: getPaymentIntent
+      summary: Read payment intent state
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: intentID, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Payment intent state }
+        '404': { description: Payment intent not found }
+  /callbacks/mpesa/stk/{token}:
+    post:
+      operationId: receiveMpesaStkCallback
+      summary: Receive token-authenticated Daraja STK callback
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Callback accepted or safely deduplicated }
+        '404': { description: Invalid callback token }
+  /callbacks/mpesa/c2b/{token}:
+    post:
+      operationId: receiveMpesaC2bConfirmation
+      summary: Receive token-authenticated Daraja C2B confirmation
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Receipt accepted or retained for allocation }
+  /callbacks/mpesa/c2b/validate/{token}:
+    post:
+      operationId: validateMpesaC2bPayment
+      summary: Validate a token-authenticated Daraja C2B request
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Validation accepted }
+  /payments/providers/mpesa:
+    get:
+      operationId: getMpesaConfiguration
+      summary: Read M-Pesa configuration status without secrets
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Provider status }
+    put:
+      operationId: configureMpesa
+      summary: Encrypt and save tenant Daraja credentials
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [environment, consumer_key, consumer_secret, business_short_code, passkey] }
+      responses:
+        '200': { description: Saved; tokenized provider callback URLs are returned once }
+  /payments/providers/mpesa/c2b/register:
+    post:
+      operationId: registerMpesaC2bUrls
+      summary: Register configured C2B callback URLs with Daraja
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: C2B URLs registered }
+  /payments/unallocated/{paymentID}/allocate:
+    post:
+      operationId: allocateUnallocatedMpesaPayment
+      summary: Assign an unmatched C2B receipt to a sale
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: paymentID, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [sale_id], properties: { sale_id: { type: string, format: uuid } } }
+      responses:
+        '200': { description: C2B receipt allocated }
+  /payments:
+    get:
+      operationId: listPayments
+      summary: List payment intents for reconciliation
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Payment intents }
+  /payments/refunds/{saleID}:
+    post:
+      operationId: refundPayment
+      summary: Refund a captured sale amount
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: saleID, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '201': { description: Refund recorded }
+  /ledger/trial-balance:
+    get:
+      operationId: getTrialBalance
+      summary: Read double-entry trial balance
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Balanced ledger totals }
+  /reconciliation/import:
+    post:
+      operationId: importPaymentStatement
+      summary: Import provider statement entries and report variances
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Reconciliation result }
 components:
   securitySchemes:
     bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
   schemas:
+    CatalogItemInput:
+      type: object
+      required: [name, sku, price_minor]
+      properties:
+        name: { type: string, minLength: 1 }
+        sku: { type: string, minLength: 1 }
+        barcode: { type: string }
+        category_id: { type: string, format: uuid }
+        kind: { type: string, enum: [stocked, service, non_inventory] }
+        price_minor: { type: integer, minimum: 0 }
+        cost_minor: { type: integer, minimum: 0 }
+        stock_on_hand: { type: integer, minimum: 0 }
+        reorder_level: { type: integer, minimum: 0 }
+    CatalogItem:
+      allOf:
+        - $ref: '#/components/schemas/CatalogItemInput'
+        - type: object
+          required: [id, stock_on_hand, currency]
+          properties:
+            id: { type: string, format: uuid }
+            currency: { type: string, minLength: 3, maxLength: 3 }
+    SaleInput:
+      type: object
+      required: [lines, received_minor]
+      properties:
+        branch_id: { type: string, format: uuid }
+        shift_id: { type: string, format: uuid }
+        customer_name: { type: string }
+        received_minor: { type: integer, minimum: 0 }
+        lines:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [item_id, quantity]
+            properties:
+              item_id: { type: string, format: uuid }
+              quantity: { type: integer, minimum: 1 }
+              discount_minor: { type: integer, minimum: 0 }
+    Tender:
+      type: object
+      required: [method, amount_minor]
+      properties:
+        method: { type: string, enum: [cash, mpesa_stk, mpesa_c2b, credit] }
+        amount_minor: { type: integer, minimum: 1 }
+        reference: { type: string }
     TokenPair:
       type: object
       required: [access_token, refresh_token, token_type, expires_in]

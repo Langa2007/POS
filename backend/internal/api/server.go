@@ -3,14 +3,18 @@ package api
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
+	"os"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/Langa2007/POS/backend/internal/adapters/mpesa"
 	"github.com/Langa2007/POS/backend/internal/kernel/ids"
 	"github.com/Langa2007/POS/backend/internal/kernel/tenancy"
 	"github.com/Langa2007/POS/backend/internal/platform/auth"
@@ -21,13 +25,26 @@ import (
 var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$`)
 
 type Server struct {
-	db     *db.Store
-	tokens *auth.TokenManager
-	logger *slog.Logger
+	db             *db.Store
+	tokens         *auth.TokenManager
+	logger         *slog.Logger
+	credentialKey  []byte
+	mpesaMu        sync.Mutex
+	mpesaProviders map[string]cachedMPesaProvider
+}
+
+type cachedMPesaProvider struct {
+	fingerprint [32]byte
+	provider    *mpesa.Daraja
+	config      mpesaStoredConfig
 }
 
 func New(store *db.Store, tokens *auth.TokenManager, logger *slog.Logger) *Server {
-	return &Server{db: store, tokens: tokens, logger: logger}
+	key := []byte(strings.TrimSpace(os.Getenv("POS_CREDENTIALS_KEY")))
+	if decoded, err := base64.StdEncoding.DecodeString(string(key)); err == nil && len(decoded) == 32 {
+		key = decoded
+	}
+	return &Server{db: store, tokens: tokens, logger: logger, credentialKey: key, mpesaProviders: make(map[string]cachedMPesaProvider)}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -43,6 +60,28 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("PUT /api/v1/users/{userID}/pin", s.requireAuth(setPIN))
 	manifest := s.requirePermission("core.manifest", http.HandlerFunc(s.manifest))
 	mux.Handle("GET /api/v1/me/manifest", s.requireAuth(manifest))
+	mux.Handle("GET /api/v1/catalog/items", s.requireAuth(s.requirePermission("catalog.read", http.HandlerFunc(s.catalog))))
+	mux.Handle("POST /api/v1/catalog/items", s.requireAuth(s.requirePermission("catalog.manage", http.HandlerFunc(s.createItem))))
+	mux.Handle("POST /api/v1/shifts", s.requireAuth(s.requirePermission("sales.shift", http.HandlerFunc(s.openShift))))
+	mux.Handle("POST /api/v1/shifts/{shiftID}/close", s.requireAuth(s.requirePermission("sales.shift", http.HandlerFunc(s.closeShift))))
+	mux.Handle("POST /api/v1/sales", s.requireAuth(s.requirePermission("sales.create", http.HandlerFunc(s.createSale))))
+	mux.Handle("GET /api/v1/reports/daily", s.requireAuth(s.requirePermission("reports.read", http.HandlerFunc(s.dailyReport))))
+	mux.Handle("POST /api/v1/sales/{saleID}/payments", s.requireAuth(s.requirePermission("payments.create", http.HandlerFunc(s.allocatePayment))))
+	mux.Handle("POST /api/v1/payments/intents", s.requireAuth(s.requirePermission("payments.create", http.HandlerFunc(s.initiatePayment))))
+	mux.Handle("GET /api/v1/payments/intents/{intentID}", s.requireAuth(s.requirePermission("payments.read", http.HandlerFunc(s.paymentIntentStatus))))
+	mux.Handle("PUT /api/v1/payments/providers/mpesa", s.requireAuth(s.requirePermission("settings.manage", http.HandlerFunc(s.configureMPesa))))
+	mux.Handle("GET /api/v1/payments/providers/mpesa", s.requireAuth(s.requirePermission("payments.read", http.HandlerFunc(s.getMPesaConfig))))
+	mux.Handle("POST /api/v1/payments/providers/mpesa/c2b/register", s.requireAuth(s.requirePermission("settings.manage", http.HandlerFunc(s.registerMPesaC2B))))
+	mux.Handle("POST /api/v1/payments/refunds/{saleID}", s.requireAuth(s.requirePermission("payments.refund", http.HandlerFunc(s.refundPayment))))
+	mux.Handle("GET /api/v1/payments", s.requireAuth(s.requirePermission("payments.read", http.HandlerFunc(s.paymentList))))
+	mux.Handle("GET /api/v1/ledger/trial-balance", s.requireAuth(s.requirePermission("ledger.read", http.HandlerFunc(s.trialBalance))))
+	mux.Handle("POST /api/v1/reconciliation/import", s.requireAuth(s.requirePermission("payments.reconcile", http.HandlerFunc(s.reconcile))))
+	mux.Handle("POST /api/v1/payments/unallocated/{paymentID}/allocate", s.requireAuth(s.requirePermission("payments.create", http.HandlerFunc(s.allocateUnallocatedPayment))))
+	mux.Handle("POST /api/v1/credit/accounts", s.requireAuth(s.requirePermission("payments.create", http.HandlerFunc(s.createCreditAccount))))
+	mux.Handle("GET /api/v1/credit/accounts/{accountID}", s.requireAuth(s.requirePermission("payments.read", http.HandlerFunc(s.creditStatement))))
+	mux.HandleFunc("POST /api/v1/callbacks/mpesa/stk/{token}", s.mpesaCallback)
+	mux.HandleFunc("POST /api/v1/callbacks/mpesa/c2b/{token}", s.mpesaC2BCallback)
+	mux.HandleFunc("POST /api/v1/callbacks/mpesa/c2b/validate/{token}", s.mpesaC2BValidation)
 	return requestID(recoverer(s.logger, mux))
 }
 
