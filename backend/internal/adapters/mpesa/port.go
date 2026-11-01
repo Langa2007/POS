@@ -37,6 +37,8 @@ type Provider interface {
 	InitiateSTK(context.Context, STKRequest) (STKResponse, error)
 	QueryStatus(context.Context, string) (string, error)
 	Reverse(context.Context, string, int64) error
+	B2C(context.Context, B2CRequest) (B2CResponse, error)
+	GenerateQR(context.Context, string) (QRResponse, error)
 	ParseCallback([]byte) (Callback, error)
 }
 

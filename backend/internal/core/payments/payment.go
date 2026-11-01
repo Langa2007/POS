@@ -63,6 +63,28 @@ func ValidateAllocation(total int64, tenders []Tender) error {
 	return nil
 }
 
+func ValidatePartialAllocation(due int64, tenders []Tender) (int64, error) {
+	if due <= 0 || len(tenders) == 0 {
+		return 0, errors.New("a positive balance and at least one tender are required")
+	}
+	var allocated int64
+	for _, tender := range tenders {
+		if tender.AmountMinor <= 0 {
+			return 0, errors.New("tender amounts must be positive")
+		}
+		switch tender.Method {
+		case "cash", "mpesa_stk", "mpesa_c2b", "credit":
+		default:
+			return 0, errors.New("unsupported tender method")
+		}
+		allocated += tender.AmountMinor
+	}
+	if allocated > due {
+		return 0, errors.New("tenders exceed outstanding balance")
+	}
+	return allocated, nil
+}
+
 type Posting struct {
 	Account string
 	Debit   int64

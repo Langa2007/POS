@@ -19,6 +19,10 @@ func TestSplitTenderAllocation(t *testing.T) {
 	if err := ValidateAllocation(1000, []Tender{{Method: "cash", AmountMinor: 900}}); err == nil {
 		t.Fatal("expected incomplete allocation")
 	}
+	amount, err := ValidatePartialAllocation(1000, []Tender{{Method: "cash", AmountMinor: 600}})
+	if err != nil || amount != 600 {
+		t.Fatalf("partial amount=%d err=%v", amount, err)
+	}
 }
 
 func TestLedgerBalance(t *testing.T) {

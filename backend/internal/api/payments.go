@@ -1,6 +1,8 @@
 package api
 
 import (
+	"bytes"
+	"encoding/csv"
 	"encoding/json"
 	"errors"
 	"io"
@@ -40,15 +42,15 @@ func (s *Server) allocatePayment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input allocatePaymentRequest
-	if json.NewDecoder(http.MaxBytesReader(w, r.Body, 16*1024)).Decode(&input) != nil || !uuidPattern.MatchString(saleID) || len(input.Tenders) != 1 {
+	if json.NewDecoder(http.MaxBytesReader(w, r.Body, 16*1024)).Decode(&input) != nil || !uuidPattern.MatchString(saleID) || len(input.Tenders) == 0 {
 		writeError(w, 400, "payments.invalid_allocation", "Provide a sale and payment tenders")
 		return
 	}
 	err = s.db.TenantTx(r.Context(), scope.TenantID, func(tx pgx.Tx) error {
 		var existingSale string
 		var existingAmount int64
-		if err := tx.QueryRow(r.Context(), `SELECT sale_id::text,amount_minor FROM payment_tenders WHERE tenant_id=$1 AND idempotency_key=$2`, scope.TenantID, key+"-cash").Scan(&existingSale, &existingAmount); err == nil {
-			if len(input.Tenders) != 1 || existingSale != saleID || existingAmount != input.Tenders[0].AmountMinor {
+		if err := tx.QueryRow(r.Context(), `SELECT sale_id::text,total_minor FROM payment_allocation_requests WHERE tenant_id=$1 AND idempotency_key=$2`, scope.TenantID, key).Scan(&existingSale, &existingAmount); err == nil {
+			if existingSale != saleID {
 				return errors.New("idempotency key was already used for a different allocation")
 			}
 			return nil
@@ -65,17 +67,19 @@ func (s *Server) allocatePayment(w http.ResponseWriter, r *http.Request) {
 		due := total - paid
 		tenders := make([]payments.Tender, len(input.Tenders))
 		for i, tender := range input.Tenders {
-			if tender.Method != "cash" {
-				return errors.New("manual allocation supports cash only; use provider callbacks for electronic tenders")
-			}
 			tenders[i] = payments.Tender{Method: tender.Method, AmountMinor: tender.AmountMinor, Reference: tender.Reference}
 		}
-		if err := payments.ValidateAllocation(due, tenders); err != nil {
+		allocated, err := payments.ValidatePartialAllocation(due, tenders)
+		if err != nil {
 			return err
 		}
-		for _, tender := range input.Tenders {
+		requestID, _ := ids.NewUUIDv7()
+		if _, err := tx.Exec(r.Context(), `INSERT INTO payment_allocation_requests(id,tenant_id,sale_id,idempotency_key,total_minor) VALUES($1,$2,$3,$4,$5)`, requestID, scope.TenantID, saleID, key, allocated); err != nil {
+			return err
+		}
+		for index, tender := range input.Tenders {
 			tenderID, _ := ids.NewUUIDv7()
-			if _, err := tx.Exec(r.Context(), `INSERT INTO payment_tenders(id,tenant_id,sale_id,method,amount_minor,provider_reference,idempotency_key) VALUES($1,$2,$3,$4,$5,NULLIF($6,''),$7) ON CONFLICT (tenant_id,idempotency_key) DO NOTHING`, tenderID, scope.TenantID, saleID, tender.Method, tender.AmountMinor, tender.Reference, key+"-"+tender.Method); err != nil {
+			if _, err := tx.Exec(r.Context(), `INSERT INTO payment_tenders(id,tenant_id,sale_id,method,amount_minor,provider_reference,idempotency_key) VALUES($1,$2,$3,$4,$5,NULLIF($6,''),$7)`, tenderID, scope.TenantID, saleID, tender.Method, tender.AmountMinor, tender.Reference, key+"-"+strconv.Itoa(index)); err != nil {
 				return err
 			}
 			if tender.Method == "cash" {
@@ -86,7 +90,7 @@ func (s *Server) allocatePayment(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		journalID, _ := ids.NewUUIDv7()
-		if _, err := tx.Exec(r.Context(), `INSERT INTO ledger_journals(id,tenant_id,reference_type,reference_id,description) VALUES($1,$2,'sale_payment',$3,'Cash payment allocation')`, journalID, scope.TenantID, key); err != nil {
+		if _, err := tx.Exec(r.Context(), `INSERT INTO ledger_journals(id,tenant_id,reference_type,reference_id,description) VALUES($1,$2,'sale_payment',$3,'Split payment allocation')`, journalID, scope.TenantID, key); err != nil {
 			return err
 		}
 		cashAccount, revenueAccount, err := ensureLedgerAccounts(r, tx, scope.TenantID)
@@ -97,13 +101,13 @@ func (s *Server) allocatePayment(w http.ResponseWriter, r *http.Request) {
 			account string
 			debit   int64
 			credit  int64
-		}{{cashAccount, due, 0}, {revenueAccount, 0, due}} {
+		}{{cashAccount, allocated, 0}, {revenueAccount, 0, allocated}} {
 			lineID, _ := ids.NewUUIDv7()
 			if _, err := tx.Exec(r.Context(), `INSERT INTO ledger_lines(id,tenant_id,journal_id,account_id,debit_minor,credit_minor) VALUES($1,$2,$3,$4,$5,$6)`, lineID, scope.TenantID, journalID, posting.account, posting.debit, posting.credit); err != nil {
 				return err
 			}
 		}
-		if paid+due >= total {
+		if paid+allocated >= total {
 			_, err := tx.Exec(r.Context(), `UPDATE sales SET status='completed' WHERE tenant_id=$1 AND id=$2 AND status='pending_payment'`, scope.TenantID, saleID)
 			if err != nil {
 				return err
@@ -526,7 +530,7 @@ func (s *Server) refundPayment(w http.ResponseWriter, r *http.Request) {
 		if captured > total || input.AmountMinor > captured-refunded {
 			return errors.New("refund exceeds captured balance")
 		}
-		_, err := tx.Exec(r.Context(), `INSERT INTO payment_refunds(id,tenant_id,sale_id,amount_minor,reason,status,idempotency_key) VALUES($1,$2,$3,$4,$5,'pending',$6)`, refundID, scope.TenantID, saleID, input.AmountMinor, strings.TrimSpace(input.Reason), key)
+		_, err := tx.Exec(r.Context(), `INSERT INTO payment_refunds(id,tenant_id,sale_id,amount_minor,reason,status,idempotency_key,requested_by) VALUES($1,$2,$3,$4,$5,'pending',$6,$7)`, refundID, scope.TenantID, saleID, input.AmountMinor, strings.TrimSpace(input.Reason), key, scope.UserID)
 		return err
 	})
 	if err != nil {
@@ -534,6 +538,59 @@ func (s *Server) refundPayment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 202, map[string]any{"refund_id": refundID, "status": "pending_approval_or_provider", "amount_minor": input.AmountMinor})
+}
+
+func (s *Server) approveRefund(w http.ResponseWriter, r *http.Request) {
+	scope, err := tenancy.Require(r.Context())
+	if err != nil {
+		writeError(w, 401, "auth.required", "A valid bearer token is required")
+		return
+	}
+	refundID := r.PathValue("refundID")
+	if !uuidPattern.MatchString(refundID) {
+		writeError(w, 400, "refund.invalid", "A valid refund_id is required")
+		return
+	}
+	err = s.db.TenantTx(r.Context(), scope.TenantID, func(tx pgx.Tx) error {
+		var saleID, status string
+		var requestedBy *string
+		var amount int64
+		if err := tx.QueryRow(r.Context(), `SELECT sale_id::text,amount_minor,status,requested_by::text FROM payment_refunds WHERE tenant_id=$1 AND id=$2 FOR UPDATE`, scope.TenantID, refundID).Scan(&saleID, &amount, &status, &requestedBy); err != nil {
+			return err
+		}
+		if status == "completed" {
+			return nil
+		}
+		if status != "pending" {
+			return errors.New("refund is not approvable")
+		}
+		if requestedBy != nil && *requestedBy == scope.UserID {
+			return errors.New("refund requester cannot approve their own refund")
+		}
+		if err := postRefundJournal(r, tx, scope.TenantID, refundID, saleID, amount); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(r.Context(), `UPDATE payment_refunds SET status='completed',approved_by=$3,approved_at=now() WHERE tenant_id=$1 AND id=$2`, scope.TenantID, refundID, scope.UserID); err != nil {
+			return err
+		}
+		var total, refunded int64
+		if err := tx.QueryRow(r.Context(), `SELECT total_minor FROM sales WHERE tenant_id=$1 AND id=$2`, scope.TenantID, saleID).Scan(&total); err != nil {
+			return err
+		}
+		if err := tx.QueryRow(r.Context(), `SELECT COALESCE(SUM(amount_minor),0) FROM payment_refunds WHERE tenant_id=$1 AND sale_id=$2 AND status='completed'`, scope.TenantID, saleID).Scan(&refunded); err != nil {
+			return err
+		}
+		if refunded >= total {
+			_, err := tx.Exec(r.Context(), `UPDATE sales SET status='returned' WHERE tenant_id=$1 AND id=$2`, scope.TenantID, saleID)
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		writeError(w, 400, "refund.approval_failed", err.Error())
+		return
+	}
+	writeJSON(w, 200, map[string]string{"refund_id": refundID, "status": "completed"})
 }
 
 func (s *Server) paymentList(w http.ResponseWriter, r *http.Request) {
@@ -646,30 +703,108 @@ func (s *Server) reconcile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var entries []struct {
+	type statementEntry struct {
 		ProviderReference string `json:"provider_reference"`
 		AmountMinor       int64  `json:"amount_minor"`
 		StatementDate     string `json:"statement_date"`
 	}
-	if json.NewDecoder(http.MaxBytesReader(w, r.Body, 128*1024)).Decode(&entries) != nil {
-		writeError(w, 400, "reconciliation.invalid", "A JSON statement is required")
+	var entries []statementEntry
+	body, readErr := io.ReadAll(http.MaxBytesReader(w, r.Body, 128*1024))
+	if readErr != nil {
+		writeError(w, 400, "reconciliation.invalid", "Statement is too large or unreadable")
+		return
+	}
+	if len(bytes.TrimSpace(body)) == 0 {
+		writeError(w, 400, "reconciliation.invalid", "A JSON or CSV statement is required")
+		return
+	}
+	if bytes.HasPrefix(bytes.TrimSpace(body), []byte("[")) {
+		if json.Unmarshal(body, &entries) != nil {
+			writeError(w, 400, "reconciliation.invalid", "Invalid JSON statement")
+			return
+		}
+	} else {
+		reader := csv.NewReader(bytes.NewReader(body))
+		reader.TrimLeadingSpace = true
+		reader.FieldsPerRecord = -1
+		rows, err := reader.ReadAll()
+		if err != nil || len(rows) < 2 {
+			writeError(w, 400, "reconciliation.invalid", "CSV needs a header and at least one statement row")
+			return
+		}
+		header := map[string]int{}
+		for i, name := range rows[0] {
+			header[strings.ToLower(strings.TrimSpace(name))] = i
+		}
+		refCol, refOK := header["provider_reference"]
+		amountCol, amountOK := header["amount_minor"]
+		dateCol, dateOK := header["statement_date"]
+		if !refOK || !amountOK {
+			writeError(w, 400, "reconciliation.invalid", "CSV headers must include provider_reference and amount_minor")
+			return
+		}
+		for _, row := range rows[1:] {
+			if len(row) == 1 && strings.TrimSpace(row[0]) == "" {
+				continue
+			}
+			if refCol >= len(row) || amountCol >= len(row) {
+				writeError(w, 400, "reconciliation.invalid", "CSV row is missing required values")
+				return
+			}
+			amount, err := strconv.ParseInt(strings.TrimSpace(row[amountCol]), 10, 64)
+			if err != nil || amount < 0 || strings.TrimSpace(row[refCol]) == "" {
+				writeError(w, 400, "reconciliation.invalid", "CSV reference and amount_minor values are invalid")
+				return
+			}
+			entry := statementEntry{ProviderReference: strings.TrimSpace(row[refCol]), AmountMinor: amount}
+			if dateOK && dateCol < len(row) {
+				entry.StatementDate = strings.TrimSpace(row[dateCol])
+			}
+			if entry.StatementDate != "" {
+				if _, err := time.Parse("2006-01-02", entry.StatementDate); err != nil {
+					writeError(w, 400, "reconciliation.invalid", "CSV statement_date must use YYYY-MM-DD")
+					return
+				}
+			}
+			entries = append(entries, entry)
+		}
+	}
+	if len(entries) == 0 {
+		writeError(w, 400, "reconciliation.invalid", "Statement contains no entries")
 		return
 	}
 	matched, variances := 0, 0
+	unresolved := 0
 	err = s.db.TenantTx(r.Context(), scope.TenantID, func(tx pgx.Tx) error {
 		for _, entry := range entries {
+			if strings.TrimSpace(entry.ProviderReference) == "" || entry.AmountMinor < 0 {
+				return errors.New("statement reference and non-negative amount are required")
+			}
+			if entry.StatementDate != "" {
+				if _, err := time.Parse("2006-01-02", entry.StatementDate); err != nil {
+					return errors.New("statement date must use YYYY-MM-DD")
+				}
+			}
 			var expected int64
-			_ = tx.QueryRow(r.Context(), `SELECT amount_minor FROM payment_intents WHERE tenant_id=$1 AND provider_reference=$2 AND status='captured'`, scope.TenantID, entry.ProviderReference).Scan(&expected)
+			lookupErr := tx.QueryRow(r.Context(), `SELECT amount_minor FROM payment_intents WHERE tenant_id=$1 AND provider_reference=$2 AND status='captured' UNION ALL SELECT amount_minor FROM unallocated_payments WHERE tenant_id=$1 AND provider_reference=$2 LIMIT 1`, scope.TenantID, entry.ProviderReference).Scan(&expected)
 			variance := entry.AmountMinor - expected
 			status := "matched"
-			if variance != 0 {
+			var expectedValue any = expected
+			if lookupErr == pgx.ErrNoRows {
+				status = "unresolved"
+				expectedValue = nil
+				unresolved++
+				variance = entry.AmountMinor
+			} else if lookupErr != nil {
+				return lookupErr
+			} else if variance != 0 {
 				status = "variance"
 				variances++
 			} else {
 				matched++
 			}
 			id, _ := ids.NewUUIDv7()
-			if _, err := tx.Exec(r.Context(), `INSERT INTO reconciliation_records(id,tenant_id,provider,provider_reference,expected_minor,actual_minor,variance_minor,status,statement_date) VALUES($1,$2,'mpesa',$3,$4,$5,$6,$7,NULLIF($8,'')::date)`, id, scope.TenantID, entry.ProviderReference, expected, entry.AmountMinor, variance, status, entry.StatementDate); err != nil {
+			if _, err := tx.Exec(r.Context(), `INSERT INTO reconciliation_records(id,tenant_id,provider,provider_reference,expected_minor,actual_minor,variance_minor,status,statement_date) VALUES($1,$2,'mpesa',$3,$4,$5,$6,$7,NULLIF($8,'')::date)`, id, scope.TenantID, entry.ProviderReference, expectedValue, entry.AmountMinor, variance, status, entry.StatementDate); err != nil {
 				return err
 			}
 		}
@@ -679,7 +814,71 @@ func (s *Server) reconcile(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "reconciliation.failed", err.Error())
 		return
 	}
-	writeJSON(w, 200, map[string]int{"matched": matched, "variances": variances})
+	writeJSON(w, 200, map[string]int{"matched": matched, "variances": variances, "unresolved": unresolved})
+}
+
+func (s *Server) unallocatedPaymentList(w http.ResponseWriter, r *http.Request) {
+	scope, err := tenancy.Require(r.Context())
+	if err != nil {
+		writeError(w, 401, "auth.required", "A valid bearer token is required")
+		return
+	}
+	rowsOut := make([]map[string]any, 0)
+	err = s.db.TenantTx(r.Context(), scope.TenantID, func(tx pgx.Tx) error {
+		rows, err := tx.Query(r.Context(), `SELECT id::text,provider_reference,amount_minor,COALESCE(account_reference,''),status,created_at FROM unallocated_payments WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 500`, scope.TenantID)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var id, ref, account, status string
+			var amount int64
+			var created time.Time
+			if err := rows.Scan(&id, &ref, &amount, &account, &status, &created); err != nil {
+				return err
+			}
+			rowsOut = append(rowsOut, map[string]any{"id": id, "provider_reference": ref, "amount_minor": amount, "account_reference": account, "status": status, "created_at": created})
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		writeError(w, 500, "payments.unavailable", "Unallocated payments could not be loaded")
+		return
+	}
+	writeJSON(w, 200, map[string]any{"payments": rowsOut})
+}
+
+func (s *Server) reconciliationList(w http.ResponseWriter, r *http.Request) {
+	scope, err := tenancy.Require(r.Context())
+	if err != nil {
+		writeError(w, 401, "auth.required", "A valid bearer token is required")
+		return
+	}
+	result := make([]map[string]any, 0)
+	err = s.db.TenantTx(r.Context(), scope.TenantID, func(tx pgx.Tx) error {
+		rows, err := tx.Query(r.Context(), `SELECT provider_reference,expected_minor,actual_minor,variance_minor,status,statement_date,created_at FROM reconciliation_records WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 500`, scope.TenantID)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var ref, status string
+			var expected, actual *int64
+			var variance int64
+			var date *time.Time
+			var created time.Time
+			if err := rows.Scan(&ref, &expected, &actual, &variance, &status, &date, &created); err != nil {
+				return err
+			}
+			result = append(result, map[string]any{"provider_reference": ref, "expected_minor": expected, "actual_minor": actual, "variance_minor": variance, "status": status, "statement_date": date, "created_at": created})
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		writeError(w, 500, "reconciliation.unavailable", "Reconciliation report could not be loaded")
+		return
+	}
+	writeJSON(w, 200, map[string]any{"records": result})
 }
 
 func (s *Server) createCreditAccount(w http.ResponseWriter, r *http.Request) {
@@ -787,6 +986,45 @@ func postPaymentJournal(r *http.Request, tx pgx.Tx, tenantID, intentID, saleID s
 	_ = cashAccount
 	_ = saleID
 	_ = reference
+	return nil
+}
+
+func postRefundJournal(r *http.Request, tx pgx.Tx, tenantID, refundID, saleID string, amount int64) error {
+	_, revenueAccount, err := ensureLedgerAccounts(r, tx, tenantID)
+	if err != nil {
+		return err
+	}
+	clearingID, _ := ids.NewUUIDv7()
+	if _, err := tx.Exec(r.Context(), `INSERT INTO ledger_accounts(id,tenant_id,code,name,account_type) VALUES($1,$2,'1120','M-Pesa clearing','asset') ON CONFLICT(tenant_id,code) DO NOTHING`, clearingID, tenantID); err != nil {
+		return err
+	}
+	if err := tx.QueryRow(r.Context(), `SELECT id::text FROM ledger_accounts WHERE tenant_id=$1 AND code='1120'`, tenantID).Scan(&clearingID); err != nil {
+		return err
+	}
+	journalID, _ := ids.NewUUIDv7()
+	if _, err := tx.Exec(r.Context(), `INSERT INTO ledger_journals(id,tenant_id,reference_type,reference_id,description) VALUES($1,$2,'refund',$3,'Payment refund reversal') ON CONFLICT(tenant_id,reference_type,reference_id) DO NOTHING`, journalID, tenantID, refundID); err != nil {
+		return err
+	}
+	if err := tx.QueryRow(r.Context(), `SELECT id::text FROM ledger_journals WHERE tenant_id=$1 AND reference_type='refund' AND reference_id=$2`, tenantID, refundID).Scan(&journalID); err != nil {
+		return err
+	}
+	var count int
+	if err := tx.QueryRow(r.Context(), `SELECT count(*) FROM ledger_lines WHERE tenant_id=$1 AND journal_id=$2`, tenantID, journalID).Scan(&count); err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+	for _, line := range []struct {
+		account       string
+		debit, credit int64
+	}{{revenueAccount, amount, 0}, {clearingID, 0, amount}} {
+		lineID, _ := ids.NewUUIDv7()
+		if _, err := tx.Exec(r.Context(), `INSERT INTO ledger_lines(id,tenant_id,journal_id,account_id,debit_minor,credit_minor) VALUES($1,$2,$3,$4,$5,$6)`, lineID, tenantID, journalID, line.account, line.debit, line.credit); err != nil {
+			return err
+		}
+	}
+	_ = saleID
 	return nil
 }
 

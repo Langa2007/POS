@@ -17,3 +17,16 @@ func TestSimulatorSupportsSuccessAndFailureModes(t *testing.T) {
 		t.Fatalf("status=%s err=%v", status, err)
 	}
 }
+
+func TestSimulatorCallbackDeliveryModes(t *testing.T) {
+	callback := Callback{CheckoutRequestID: "checkout-1", ResultCode: 0}
+	sim := &Simulator{Mode: "lost_callback"}
+	if got := sim.DeliverCallback(callback); len(got) != 0 {
+		t.Fatalf("lost callback delivered %d times", len(got))
+	}
+	sim.Mode = "duplicate_callback"
+	got := sim.DeliverCallback(callback)
+	if len(got) != 2 || got[0] != got[1] {
+		t.Fatalf("duplicate callback sequence = %#v", got)
+	}
+}

@@ -66,3 +66,13 @@ func TestDarajaParsesSafaricomCallbackAndNormalizesPhone(t *testing.T) {
 		t.Fatalf("callback=%+v", callback)
 	}
 }
+
+func TestDarajaRejectsFractionalB2CShillings(t *testing.T) {
+	d, err := NewDaraja(DarajaConfig{Environment: "sandbox", ConsumerKey: "key", ConsumerSecret: "secret", BusinessShortCode: "123456", Passkey: "pass", CallbackURL: "https://pos.example/callback", InitiatorName: "initiator", SecurityCredential: "credential", QueueTimeoutURL: "https://pos.example/timeout", ResultURL: "https://pos.example/result"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.B2C(context.Background(), B2CRequest{Phone: "254700000000", AmountMinor: 101}); err == nil {
+		t.Fatal("expected fractional shilling amount rejection")
+	}
+}

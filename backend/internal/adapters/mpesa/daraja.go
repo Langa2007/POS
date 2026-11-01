@@ -18,16 +18,20 @@ import (
 // DarajaConfig contains seller-specific credentials. Callback URLs are supplied
 // by the POS deployment and must be publicly reachable by Safaricom.
 type DarajaConfig struct {
-	Environment       string `json:"environment"`
-	ConsumerKey       string `json:"consumer_key"`
-	ConsumerSecret    string `json:"consumer_secret"`
-	BusinessShortCode string `json:"business_short_code"`
-	Passkey           string `json:"passkey"`
-	TransactionType   string `json:"transaction_type"`
-	CallbackURL       string `json:"callback_url"`
-	ConfirmationURL   string `json:"confirmation_url"`
-	ValidationURL     string `json:"validation_url"`
-	C2BResponseType   string `json:"c2b_response_type"`
+	Environment        string `json:"environment"`
+	ConsumerKey        string `json:"consumer_key"`
+	ConsumerSecret     string `json:"consumer_secret"`
+	BusinessShortCode  string `json:"business_short_code"`
+	Passkey            string `json:"passkey"`
+	TransactionType    string `json:"transaction_type"`
+	CallbackURL        string `json:"callback_url"`
+	ConfirmationURL    string `json:"confirmation_url"`
+	ValidationURL      string `json:"validation_url"`
+	C2BResponseType    string `json:"c2b_response_type"`
+	InitiatorName      string `json:"initiator_name,omitempty"`
+	SecurityCredential string `json:"security_credential,omitempty"`
+	QueueTimeoutURL    string `json:"queue_timeout_url,omitempty"`
+	ResultURL          string `json:"result_url,omitempty"`
 }
 
 type Daraja struct {
@@ -155,6 +159,79 @@ func (d *Daraja) QueryStatus(ctx context.Context, checkoutID string) (string, er
 
 func (d *Daraja) Reverse(context.Context, string, int64) error {
 	return errors.New("M-Pesa reversal requires a separately configured initiator and security credential")
+}
+
+type B2CRequest struct {
+	Phone       string
+	AmountMinor int64
+	Remarks     string
+	Occasion    string
+}
+
+type B2CResponse struct {
+	ConversationID           string `json:"ConversationID"`
+	OriginatorConversationID string `json:"OriginatorConversationID"`
+	ResponseCode             string `json:"ResponseCode"`
+	ResponseDescription      string `json:"ResponseDescription"`
+}
+
+type QRResponse struct {
+	QRCode string `json:"QRCode"`
+}
+
+func (d *Daraja) B2C(ctx context.Context, request B2CRequest) (B2CResponse, error) {
+	if d.Config.InitiatorName == "" || d.Config.SecurityCredential == "" || d.Config.QueueTimeoutURL == "" || d.Config.ResultURL == "" {
+		return B2CResponse{}, errors.New("M-Pesa B2C credentials and result URLs are required")
+	}
+	if request.AmountMinor <= 0 || request.AmountMinor%100 != 0 {
+		return B2CResponse{}, errors.New("M-Pesa B2C amount must be a positive whole shilling in minor units")
+	}
+	phone := normalizePhone(request.Phone)
+	if phone == "" {
+		return B2CResponse{}, errors.New("M-Pesa phone must be a valid Kenyan mobile number")
+	}
+	token, err := d.accessToken(ctx)
+	if err != nil {
+		return B2CResponse{}, err
+	}
+	payload := map[string]string{
+		"InitiatorName":      d.Config.InitiatorName,
+		"SecurityCredential": d.Config.SecurityCredential,
+		"CommandID":          "BusinessPayment",
+		"Amount":             strconv.FormatInt(request.AmountMinor/100, 10),
+		"PartyA":             d.Config.BusinessShortCode,
+		"PartyB":             phone,
+		"Remarks":            limit(request.Remarks, 100),
+		"QueueTimeOutURL":    d.Config.QueueTimeoutURL,
+		"ResultURL":          d.Config.ResultURL,
+		"Occasion":           limit(request.Occasion, 100),
+	}
+	var response B2CResponse
+	if err := d.post(ctx, token, "/mpesa/b2c/v3/paymentrequest", payload, &response); err != nil {
+		return B2CResponse{}, err
+	}
+	if response.ResponseCode != "0" || response.ConversationID == "" || response.OriginatorConversationID == "" {
+		return B2CResponse{}, fmt.Errorf("M-Pesa B2C rejected request: %s", limit(response.ResponseDescription, 120))
+	}
+	return response, nil
+}
+
+func (d *Daraja) GenerateQR(ctx context.Context, payload string) (QRResponse, error) {
+	if strings.TrimSpace(payload) == "" {
+		return QRResponse{}, errors.New("QR payload is required")
+	}
+	token, err := d.accessToken(ctx)
+	if err != nil {
+		return QRResponse{}, err
+	}
+	var response QRResponse
+	if err := d.post(ctx, token, "/mpesa/qrcode/v1/generate", map[string]string{"MerchantName": limit(d.Config.BusinessShortCode, 20), "RefNo": limit(payload, 20), "Amount": "0", "TrxCode": "BG", "CPI": d.Config.BusinessShortCode, "Size": "300"}, &response); err != nil {
+		return QRResponse{}, err
+	}
+	if response.QRCode == "" {
+		return QRResponse{}, errors.New("M-Pesa QR response is incomplete")
+	}
+	return response, nil
 }
 
 func (d *Daraja) RegisterC2B(ctx context.Context) error {

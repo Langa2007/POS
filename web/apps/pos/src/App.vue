@@ -19,6 +19,10 @@ const saleRequestKey = ref('')
 const paymentRequestKey = ref('')
 const report = ref(null)
 const payments = ref([])
+const unallocatedPayments = ref([])
+const reconciliationRecords = ref([])
+const reconciliationFile = ref(null)
+const reconciliationSummary = ref(null)
 const busy = ref(false)
 const error = ref('')
 const notice = ref('')
@@ -50,6 +54,46 @@ async function loadWorkspace() {
   items.value = (await request('/api/v1/catalog/items')).items
   report.value = await request('/api/v1/reports/daily')
   payments.value = (await request('/api/v1/payments')).payments
+  await loadPaymentOperations()
+}
+async function loadPaymentOperations() {
+  const [unallocated, reconciliation] = await Promise.allSettled([
+    request('/api/v1/payments/unallocated'),
+    request('/api/v1/reconciliation'),
+  ])
+  if (unallocated.status === 'fulfilled') unallocatedPayments.value = unallocated.value.payments
+  if (reconciliation.status === 'fulfilled') reconciliationRecords.value = reconciliation.value.records
+}
+async function importStatement() {
+  if (!reconciliationFile.value) return
+  error.value = ''; busy.value = true
+  try {
+    const response = await fetch('/api/v1/reconciliation/import', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token.value}`, 'Content-Type': 'text/csv' },
+      body: reconciliationFile.value,
+    })
+    const data = await response.json().catch(() => ({}))
+    if (!response.ok) throw new Error(data.error?.message ?? 'Statement import failed')
+    reconciliationSummary.value = data
+    reconciliationFile.value = null
+    await loadPaymentOperations()
+  } catch (cause) { error.value = cause instanceof Error ? cause.message : 'Statement import failed' }
+  finally { busy.value = false }
+}
+async function chooseStatement(event) {
+  const file = event.target.files?.[0]
+  if (!file) { reconciliationFile.value = null; return }
+  reconciliationFile.value = await file.text()
+}
+async function allocateUnallocated(payment) {
+  const saleId = window.prompt(`Enter the sale UUID for M-Pesa receipt ${payment.provider_reference}`)
+  if (!saleId) return
+  try {
+    await request(`/api/v1/payments/unallocated/${payment.id}/allocate`, { method: 'POST', body: JSON.stringify({ sale_id: saleId }) })
+    notice.value = `Receipt ${payment.provider_reference} allocated.`
+    await loadPaymentOperations()
+  } catch (cause) { error.value = cause.message }
 }
 function addToCart(item) {
   const existing = cart.value.find((line) => line.id === item.id)
@@ -128,6 +172,12 @@ if (token.value) void loadWorkspace().catch((cause) => { signOut(); error.value 
       <div class="commerce-grid"><section class="catalog-panel"><div class="panel-heading"><div><p class="eyebrow">CATALOG</p><h2>Choose an item</h2></div><input v-model="search" aria-label="Search catalog" placeholder="Search name or SKU"></div><div class="product-grid"><button v-for="item in items.filter((entry) => !search || `${entry.name} ${entry.sku}`.toLowerCase().includes(search.toLowerCase()))" :key="item.id" class="product-card" :disabled="item.kind === 'stocked' && item.stock_on_hand < 1" @click="addToCart(item)"><strong>{{ item.name }}</strong><span>{{ item.sku }}</span><b>{{ item.price_minor }} KES</b><small>{{ item.stock_on_hand }} in stock</small></button></div></section>
         <aside class="cart-panel"><div class="panel-heading"><div><p class="eyebrow">CURRENT SALE</p><h2>Cart <span>({{ cart.length }})</span></h2></div><button class="clear-button" @click="cart = []">Clear</button></div><div v-if="!cart.length" class="cart-empty">Select items from the catalog to begin.</div><div v-for="line in cart" :key="line.id" class="cart-line"><div><strong>{{ line.name }}</strong><small>{{ line.price_minor }} KES each</small></div><div class="quantity"><button @click="removeFromCart(line)" aria-label="Decrease quantity">−</button><b>{{ line.quantity }}</b><button @click="addToCart(line)" aria-label="Increase quantity">+</button></div></div><div class="cart-total"><span>Total</span><strong>{{ total }} KES</strong></div><label class="cash-label">Payment method<select v-model="paymentMethod"><option value="cash">Cash</option><option value="mpesa_stk">M-Pesa STK Push</option></select></label><template v-if="paymentMethod === 'cash'"><label class="cash-label">Cash received<input v-model="received" type="number" min="0" :placeholder="String(total)"></label><p class="change-line">Change <strong>{{ change }} KES</strong></p></template><label v-else class="cash-label">Customer M-Pesa number<input v-model="phone" type="tel" inputmode="tel" placeholder="07XXXXXXXX"></label><p v-if="pendingPayment" class="change-line" role="status">Latest M-Pesa payment: <strong>{{ pendingPayment.status }}</strong></p><PosButton class="checkout-button" :disabled="!cart.length || !shiftId" @click="checkout">{{ paymentMethod === 'cash' ? 'Complete cash sale' : 'Send M-Pesa prompt' }}</PosButton></aside>
       </div>
+      <section class="payments-ops">
+        <div class="panel-heading"><div><p class="eyebrow">PAYMENTS BACK OFFICE</p><h2>Reconciliation</h2></div><span class="summary-foot">Recent statement matches and unmatched receipts</span></div>
+        <form class="statement-import" @submit.prevent="importStatement"><label class="cash-label">Import M-Pesa CSV statement<input type="file" accept=".csv,text/csv" @change="chooseStatement"></label><PosButton type="submit" :disabled="!reconciliationFile || busy">{{ busy ? 'Importing…' : 'Import statement' }}</PosButton><small>CSV headers: provider_reference, amount_minor, statement_date (optional).</small></form>
+        <p v-if="reconciliationSummary" class="notice" role="status">Import result: {{ reconciliationSummary.matched }} matched, {{ reconciliationSummary.variances }} variance, {{ reconciliationSummary.unresolved }} unresolved.</p>
+        <div class="operations-grid"><section><h3>Unallocated receipts</h3><p v-if="!unallocatedPayments.length" class="cart-empty">No unallocated receipts found, or your role cannot view this queue.</p><article v-for="payment in unallocatedPayments.filter((entry) => entry.status === 'unallocated')" :key="payment.id" class="operation-row"><div><strong>{{ payment.provider_reference }}</strong><small>{{ payment.account_reference || 'No account reference' }} · {{ payment.amount_minor }} KES</small></div><PosButton variant="secondary" @click="allocateUnallocated(payment)">Allocate</PosButton></article></section><section><h3>Latest statement records</h3><p v-if="!reconciliationRecords.length" class="cart-empty">No statement entries found, or your role cannot view this report.</p><article v-for="entry in reconciliationRecords.slice(0, 8)" :key="`${entry.provider_reference}-${entry.created_at}`" class="operation-row"><div><strong>{{ entry.provider_reference }}</strong><small>Expected {{ entry.expected_minor ?? 'unmatched' }} · actual {{ entry.actual_minor }} KES</small></div><span class="operation-status" :data-status="entry.status">{{ entry.status }}</span></article></section></div>
+      </section>
     </section>
     <footer>Built for the way your business works <span>•</span> English <span>•</span> Kiswahili coming soon</footer>
   </main>

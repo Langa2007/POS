@@ -241,7 +241,7 @@ paths:
   /sales/{saleID}/payments:
     post:
       operationId: allocateSalePayments
-      summary: Allocate a cash balance payment to an unpaid sale
+      summary: Allocate one or more tenders to an unpaid sale balance
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: saleID, in: path, required: true, schema: { type: string, format: uuid } }
@@ -352,6 +352,20 @@ paths:
             schema: { type: object, required: [sale_id], properties: { sale_id: { type: string, format: uuid } } }
       responses:
         '200': { description: C2B receipt allocated }
+  /payments/unallocated:
+    get:
+      operationId: listUnallocatedPayments
+      summary: Review matched and unallocated C2B payments
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Unallocated and resolved payment records }
+  /reconciliation:
+    get:
+      operationId: listReconciliationRecords
+      summary: Review imported statement reconciliation results
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Recent reconciliation records }
   /payments:
     get:
       operationId: listPayments
@@ -368,6 +382,16 @@ paths:
         - { name: saleID, in: path, required: true, schema: { type: string, format: uuid } }
       responses:
         '201': { description: Refund recorded }
+  /payments/refunds/{refundID}/approve:
+    post:
+      operationId: approveRefund
+      summary: Approve a pending refund and post its ledger reversal
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: refundID, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Refund completed }
+        '400': { description: Refund is not approvable }
   /ledger/trial-balance:
     get:
       operationId: getTrialBalance
@@ -382,6 +406,7 @@ paths:
       security: [{ bearerAuth: [] }]
       responses:
         '200': { description: Reconciliation result }
+        '400': { description: Invalid JSON or CSV statement }
 components:
   securitySchemes:
     bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
