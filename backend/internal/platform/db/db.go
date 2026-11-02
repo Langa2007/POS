@@ -105,3 +105,5 @@ func (s *Store) TenantTx(ctx context.Context, tenantID string, fn func(pgx.Tx) e
 	}
 	return tx.Commit(ctx)
 }
+
+func (s *Store) Pool() *pgxpool.Pool { return s.pool }

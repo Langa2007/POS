@@ -1,0 +1,6 @@
+{
+  "id": "demo",
+  "routes": [{"path": "/demo", "component": "DemoView"}],
+  "slots": [{"name": "checkout.sidebar", "component": "DemoSlot"}],
+  "nav": [{"label": "Demo", "path": "/demo", "permission": "demo.read"}]
+}

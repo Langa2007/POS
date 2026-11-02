@@ -1,0 +1,10 @@
+{
+  "key": "restaurant",
+  "name": "Restaurant",
+  "capabilities": ["table_service", "kitchen_display"],
+  "settings": {},
+  "roles": ["owner", "manager", "waiter", "kitchen"],
+  "custom_fields": [],
+  "document_templates": ["kitchen_ticket_80"],
+  "ui_layout": "floor_plan"
+}

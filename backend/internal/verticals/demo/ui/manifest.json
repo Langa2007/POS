@@ -1,0 +1,10 @@
+{
+  "id": "demo",
+  "name": "Demo",
+  "version": "0.1.0",
+  "capabilities": ["demo.toy"],
+  "routes": [{"path": "/demo", "component": "DemoView"}],
+  "slots": [{"name": "checkout.sidebar", "component": "DemoSlot"}],
+  "nav": [{"label": "Demo", "path": "/demo", "icon": "sparkles"}],
+  "permissions": ["demo.read"]
+}

@@ -1,0 +1,10 @@
+{
+  "key": "retail",
+  "name": "Retail",
+  "capabilities": ["loyalty"],
+  "settings": {"inventory.pick_strategy": "FIFO"},
+  "roles": ["owner", "manager", "cashier"],
+  "custom_fields": [],
+  "document_templates": ["receipt_thermal_80"],
+  "ui_layout": "grid_pos"
+}

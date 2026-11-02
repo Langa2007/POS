@@ -1,0 +1,13 @@
+{
+  "key": "pharmacy",
+  "name": "Pharmacy",
+  "capabilities": ["batch_tracking", "expiry_tracking", "prescriptions", "controlled_substances", "multi_uom"],
+  "settings": {"inventory.pick_strategy": "FEFO", "sales.require_customer_for_categories": ["controlled"]},
+  "roles": ["owner", "pharmacist", "dispenser", "cashier"],
+  "custom_fields": [
+    {"entity": "item", "key": "generic_name", "type": "text", "label": "Generic Name"},
+    {"entity": "item", "key": "requires_prescription", "type": "boolean", "label": "Requires Prescription"}
+  ],
+  "document_templates": ["receipt_thermal_80", "dispensing_label"],
+  "ui_layout": "pharmacy_counter"
+}

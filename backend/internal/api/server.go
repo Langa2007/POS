@@ -15,7 +15,13 @@ import (
 	"time"
 
 	"github.com/Langa2007/POS/backend/internal/adapters/mpesa"
+	"github.com/Langa2007/POS/backend/internal/core/customfields"
 	"github.com/Langa2007/POS/backend/internal/core/fiscal"
+	"github.com/Langa2007/POS/backend/internal/core/importexport"
+	"github.com/Langa2007/POS/backend/internal/core/presets"
+	"github.com/Langa2007/POS/backend/internal/core/rules"
+	"github.com/Langa2007/POS/backend/internal/core/templates"
+	"github.com/Langa2007/POS/backend/internal/core/workflows"
 	"github.com/Langa2007/POS/backend/internal/kernel/ids"
 	"github.com/Langa2007/POS/backend/internal/kernel/tenancy"
 	"github.com/Langa2007/POS/backend/internal/platform/auth"
@@ -33,6 +39,12 @@ type Server struct {
 	mpesaMu         sync.Mutex
 	mpesaProviders  map[string]cachedMPesaProvider
 	fiscalSubmitter fiscal.Submitter
+	presets         *presets.Store
+	customfields    *customfields.Store
+	rules           *rules.Store
+	workflows       *workflows.Store
+	templates       *templates.Store
+	importexport    *importexport.Store
 }
 
 type cachedMPesaProvider struct {
@@ -46,7 +58,19 @@ func New(store *db.Store, tokens *auth.TokenManager, logger *slog.Logger) *Serve
 	if decoded, err := base64.StdEncoding.DecodeString(string(key)); err == nil && len(decoded) == 32 {
 		key = decoded
 	}
-	s := &Server{db: store, tokens: tokens, logger: logger, credentialKey: key, mpesaProviders: make(map[string]cachedMPesaProvider)}
+	s := &Server{
+		db:             store,
+		tokens:         tokens,
+		logger:         logger,
+		credentialKey:  key,
+		mpesaProviders: make(map[string]cachedMPesaProvider),
+		presets:        presets.New(store.Pool()),
+		customfields:   customfields.New(store.Pool()),
+		rules:          rules.New(store.Pool()),
+		workflows:      workflows.New(store.Pool()),
+		templates:      templates.New(store.Pool()),
+		importexport:   importexport.New(store.Pool()),
+	}
 	if strings.EqualFold(strings.TrimSpace(os.Getenv("POS_FISCAL_MODE")), "simulator") {
 		s.fiscalSubmitter = fiscal.Simulator{}
 	}
@@ -117,6 +141,22 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/callbacks/mpesa/stk/{token}", s.mpesaCallback)
 	mux.HandleFunc("POST /api/v1/callbacks/mpesa/c2b/{token}", s.mpesaC2BCallback)
 	mux.HandleFunc("POST /api/v1/callbacks/mpesa/c2b/validate/{token}", s.mpesaC2BValidation)
+	mux.Handle("GET /api/v1/presets", s.requireAuth(http.HandlerFunc(s.listPresets)))
+	mux.Handle("POST /api/v1/presets/{presetID}/apply", s.requireAuth(s.requirePermission("settings.manage", http.HandlerFunc(s.applyPreset))))
+	mux.Handle("GET /api/v1/custom-fields", s.requireAuth(http.HandlerFunc(s.listCustomFields)))
+	mux.Handle("POST /api/v1/custom-fields", s.requireAuth(s.requirePermission("settings.manage", http.HandlerFunc(s.upsertCustomField))))
+	mux.Handle("GET /api/v1/rules", s.requireAuth(http.HandlerFunc(s.listRules)))
+	mux.Handle("POST /api/v1/rules", s.requireAuth(s.requirePermission("settings.manage", http.HandlerFunc(s.upsertRule))))
+	mux.Handle("POST /api/v1/rules/simulate", s.requireAuth(http.HandlerFunc(s.simulateRules)))
+	mux.Handle("GET /api/v1/workflows", s.requireAuth(http.HandlerFunc(s.listWorkflows)))
+	mux.Handle("POST /api/v1/workflows", s.requireAuth(s.requirePermission("settings.manage", http.HandlerFunc(s.upsertWorkflow))))
+	mux.Handle("GET /api/v1/templates", s.requireAuth(http.HandlerFunc(s.listTemplates)))
+	mux.Handle("POST /api/v1/templates", s.requireAuth(s.requirePermission("settings.manage", http.HandlerFunc(s.upsertTemplate))))
+	mux.Handle("POST /api/v1/templates/{key}/render", s.requireAuth(http.HandlerFunc(s.renderTemplate)))
+	mux.Handle("POST /api/v1/import/jobs", s.requireAuth(s.requirePermission("settings.manage", http.HandlerFunc(s.createImportJob))))
+	mux.Handle("POST /api/v1/import/jobs/{jobID}/dry-run", s.requireAuth(s.requirePermission("settings.manage", http.HandlerFunc(s.dryRunImport))))
+	mux.Handle("GET /api/v1/capabilities", s.requireAuth(http.HandlerFunc(s.listCapabilities)))
+	mux.Handle("GET /api/v1/demo/hello", s.requireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, map[string]string{"message": "hello from demo vertical"}) })))
 	return requestID(recoverer(s.logger, mux))
 }
 
