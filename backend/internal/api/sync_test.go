@@ -76,6 +76,9 @@ func TestSyncPushAppliesCashSaleAtomicallyAndIdempotently(t *testing.T) {
 		if _, e := tx.Exec(ctx, `INSERT INTO catalog_items(id,tenant_id,name,sku,kind,price_minor,cost_minor,stock_on_hand) VALUES($1,$2,'Tea','SYNC-TEA','stocked',1250,500,1)`, itemID, tenantID); e != nil {
 			return e
 		}
+		if _, e := tx.Exec(ctx, `INSERT INTO branch_inventory(tenant_id,branch_id,item_id,quantity_on_hand) VALUES($1,$2,$3,1)`, tenantID, branchID, itemID); e != nil {
+			return e
+		}
 		movementID, _ := ids.NewUUIDv7()
 		_, e := tx.Exec(ctx, `INSERT INTO stock_movements(id,tenant_id,item_id,quantity_delta,reason) VALUES($1,$2,$3,1,'opening_balance')`, movementID, tenantID, itemID)
 		return e
