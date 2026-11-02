@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/Langa2007/POS/backend/internal/adapters/mpesa"
+	"github.com/Langa2007/POS/backend/internal/core/fiscal"
 	"github.com/Langa2007/POS/backend/internal/kernel/ids"
 	"github.com/Langa2007/POS/backend/internal/kernel/tenancy"
 	"github.com/Langa2007/POS/backend/internal/platform/auth"
@@ -25,12 +26,13 @@ import (
 var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$`)
 
 type Server struct {
-	db             *db.Store
-	tokens         *auth.TokenManager
-	logger         *slog.Logger
-	credentialKey  []byte
-	mpesaMu        sync.Mutex
-	mpesaProviders map[string]cachedMPesaProvider
+	db              *db.Store
+	tokens          *auth.TokenManager
+	logger          *slog.Logger
+	credentialKey   []byte
+	mpesaMu         sync.Mutex
+	mpesaProviders  map[string]cachedMPesaProvider
+	fiscalSubmitter fiscal.Submitter
 }
 
 type cachedMPesaProvider struct {
@@ -44,7 +46,11 @@ func New(store *db.Store, tokens *auth.TokenManager, logger *slog.Logger) *Serve
 	if decoded, err := base64.StdEncoding.DecodeString(string(key)); err == nil && len(decoded) == 32 {
 		key = decoded
 	}
-	return &Server{db: store, tokens: tokens, logger: logger, credentialKey: key, mpesaProviders: make(map[string]cachedMPesaProvider)}
+	s := &Server{db: store, tokens: tokens, logger: logger, credentialKey: key, mpesaProviders: make(map[string]cachedMPesaProvider)}
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("POS_FISCAL_MODE")), "simulator") {
+		s.fiscalSubmitter = fiscal.Simulator{}
+	}
+	return s
 }
 
 func (s *Server) Handler() http.Handler {
@@ -86,6 +92,28 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/v1/sync/pull", s.requireAuth(s.requirePermission("sync.pull", http.HandlerFunc(s.syncPull))))
 	mux.Handle("GET /api/v1/sync/policy", s.requireAuth(s.requirePermission("sync.policy.read", http.HandlerFunc(s.getSyncPolicy))))
 	mux.Handle("PUT /api/v1/sync/policy", s.requireAuth(s.requirePermission("sync.policy.manage", http.HandlerFunc(s.updateSyncPolicy))))
+	mux.Handle("GET /api/v1/tax/rates", s.requireAuth(s.requirePermission("tax.read", http.HandlerFunc(s.taxRates))))
+	mux.Handle("POST /api/v1/tax/rates", s.requireAuth(s.requirePermission("tax.manage", http.HandlerFunc(s.putTaxRate))))
+	mux.Handle("POST /api/v1/tax/calculate", s.requireAuth(s.requirePermission("tax.read", http.HandlerFunc(s.calculateTax))))
+	mux.Handle("GET /api/v1/suppliers", s.requireAuth(s.requirePermission("purchasing.read", http.HandlerFunc(s.suppliers))))
+	mux.Handle("POST /api/v1/suppliers", s.requireAuth(s.requirePermission("purchasing.manage", http.HandlerFunc(s.suppliers))))
+	mux.Handle("GET /api/v1/purchase-orders", s.requireAuth(s.requirePermission("purchasing.read", http.HandlerFunc(s.purchaseOrders))))
+	mux.Handle("POST /api/v1/purchase-orders", s.requireAuth(s.requirePermission("purchasing.manage", http.HandlerFunc(s.purchaseOrders))))
+	mux.Handle("POST /api/v1/purchase-orders/{orderID}/approve", s.requireAuth(s.requirePermission("purchasing.approve", http.HandlerFunc(s.approvePurchaseOrder))))
+	mux.Handle("POST /api/v1/purchase-orders/{orderID}/receipts", s.requireAuth(s.requirePermission("purchasing.receive", http.HandlerFunc(s.receivePurchaseOrder))))
+	mux.Handle("GET /api/v1/purchasing/reorder-suggestions", s.requireAuth(s.requirePermission("purchasing.read", http.HandlerFunc(s.reorderSuggestions))))
+	mux.Handle("GET /api/v1/reports/supply-summary", s.requireAuth(s.requirePermission("reports.read", http.HandlerFunc(s.supplySummary))))
+	mux.Handle("POST /api/v1/stock-takes", s.requireAuth(s.requirePermission("inventory.count", http.HandlerFunc(s.createStockTake))))
+	mux.Handle("POST /api/v1/stock-takes/{takeID}/approve", s.requireAuth(s.requirePermission("inventory.adjust", http.HandlerFunc(s.approveStockTake))))
+	mux.Handle("GET /api/v1/stock-transfers", s.requireAuth(s.requirePermission("inventory.read", http.HandlerFunc(s.stockTransfers))))
+	mux.Handle("POST /api/v1/stock-transfers", s.requireAuth(s.requirePermission("inventory.transfer", http.HandlerFunc(s.stockTransfers))))
+	mux.Handle("POST /api/v1/stock-transfers/{transferID}/receive", s.requireAuth(s.requirePermission("inventory.transfer", http.HandlerFunc(s.receiveStockTransfer))))
+	mux.Handle("POST /api/v1/supplier-invoices", s.requireAuth(s.requirePermission("payables.manage", http.HandlerFunc(s.createSupplierInvoice))))
+	mux.Handle("GET /api/v1/supplier-invoices", s.requireAuth(s.requirePermission("payables.read", http.HandlerFunc(s.supplierInvoices))))
+	mux.Handle("POST /api/v1/supplier-invoices/{invoiceID}/payments", s.requireAuth(s.requirePermission("payables.pay", http.HandlerFunc(s.paySupplierInvoice))))
+	mux.Handle("POST /api/v1/supplier-returns", s.requireAuth(s.requirePermission("purchasing.return", http.HandlerFunc(s.createSupplierReturn))))
+	mux.Handle("POST /api/v1/fiscal/submissions", s.requireAuth(s.requirePermission("fiscal.submit", http.HandlerFunc(s.createFiscalSubmission))))
+	mux.Handle("POST /api/v1/fiscal/submissions/{submissionID}/retry", s.requireAuth(s.requirePermission("fiscal.submit", http.HandlerFunc(s.retryFiscalSubmission))))
 	mux.HandleFunc("POST /api/v1/callbacks/mpesa/stk/{token}", s.mpesaCallback)
 	mux.HandleFunc("POST /api/v1/callbacks/mpesa/c2b/{token}", s.mpesaC2BCallback)
 	mux.HandleFunc("POST /api/v1/callbacks/mpesa/c2b/validate/{token}", s.mpesaC2BValidation)

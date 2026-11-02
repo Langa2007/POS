@@ -42,7 +42,7 @@ func (s *Server) catalog(w http.ResponseWriter, r *http.Request) {
 	}
 	items := make([]map[string]any, 0)
 	err = s.db.TenantTx(r.Context(), scope.TenantID, func(tx pgx.Tx) error {
-		rows, err := tx.Query(r.Context(), `SELECT id::text,name,sku,COALESCE(barcode,''),price_minor,cost_minor,currency,stock_on_hand,reorder_level,COALESCE(category_id::text,''),kind FROM catalog_items WHERE tenant_id=$1 AND active AND ($2='' OR lower(name) LIKE lower('%'||$2||'%') OR sku ILIKE '%'||$2||'%' OR barcode=$2) ORDER BY name LIMIT $3`, scope.TenantID, query, limit)
+		rows, err := tx.Query(r.Context(), `SELECT ci.id::text,ci.name,ci.sku,COALESCE(ci.barcode,''),ci.price_minor,ci.cost_minor,ci.currency,COALESCE(bi.quantity_on_hand,ci.stock_on_hand),ci.reorder_level,COALESCE(ci.category_id::text,''),ci.kind FROM catalog_items ci LEFT JOIN branch_inventory bi ON bi.tenant_id=ci.tenant_id AND bi.item_id=ci.id AND bi.branch_id=NULLIF($4,'')::uuid WHERE ci.tenant_id=$1 AND ci.active AND ($2='' OR lower(ci.name) LIKE lower('%'||$2||'%') OR ci.sku ILIKE '%'||$2||'%' OR ci.barcode=$2) ORDER BY ci.name LIMIT $3`, scope.TenantID, query, limit, scope.BranchID)
 		if err != nil {
 			return err
 		}
@@ -94,9 +94,16 @@ func (s *Server) createItem(w http.ResponseWriter, r *http.Request) {
 		if err = publishCatalogItemChange(r, tx, scope.TenantID, itemID); err != nil {
 			return err
 		}
+		branchID := scope.BranchID
+		if branchID == "" {
+			_ = tx.QueryRow(r.Context(), `SELECT id::text FROM branches WHERE tenant_id=$1 ORDER BY created_at,id LIMIT 1`, scope.TenantID).Scan(&branchID)
+		}
+		if input.Kind == "stocked" && branchID != "" {
+			if _, err = tx.Exec(r.Context(), `INSERT INTO branch_inventory(tenant_id,branch_id,item_id,quantity_on_hand) VALUES($1,$2,$3,$4) ON CONFLICT(tenant_id,branch_id,item_id) DO UPDATE SET quantity_on_hand=excluded.quantity_on_hand,updated_at=now()`, scope.TenantID, branchID, itemID, input.StockOnHand); err != nil { return err }
+		}
 		if input.StockOnHand > 0 {
 			movementID, _ := ids.NewUUIDv7()
-			if _, err = tx.Exec(r.Context(), `INSERT INTO stock_movements(id,tenant_id,item_id,quantity_delta,reason) VALUES($1,$2,$3,$4,'opening_balance')`, movementID, scope.TenantID, itemID, input.StockOnHand); err != nil {
+			if _, err = tx.Exec(r.Context(), `INSERT INTO stock_movements(id,tenant_id,branch_id,item_id,quantity_delta,reason) VALUES($1,$2,NULLIF($3,'')::uuid,$4,$5,'opening_balance')`, movementID, scope.TenantID, branchID, itemID, input.StockOnHand); err != nil {
 				return err
 			}
 		}
@@ -160,6 +167,7 @@ func (s *Server) createSale(w http.ResponseWriter, r *http.Request) {
 		if branchID == "" && tx.QueryRow(r.Context(), `SELECT id::text FROM branches WHERE tenant_id=$1 ORDER BY created_at LIMIT 1`, scope.TenantID).Scan(&branchID) != nil {
 			return errors.New("branch is required")
 		}
+		if scope.BranchID != "" && scope.BranchID != branchID { return errors.New("branch is outside the authenticated scope") }
 		shiftID := input.ShiftID
 		if shiftID == "" && tx.QueryRow(r.Context(), `SELECT id::text FROM shifts WHERE tenant_id=$1 AND user_id=$2 AND status='open'`, scope.TenantID, scope.UserID).Scan(&shiftID) != nil {
 			return errors.New("an open shift is required")
@@ -176,8 +184,9 @@ func (s *Server) createSale(w http.ResponseWriter, r *http.Request) {
 			if raw.Quantity <= 0 || tx.QueryRow(r.Context(), `SELECT id::text,price_minor,stock_on_hand,kind,currency FROM catalog_items WHERE tenant_id=$1 AND id=$2 AND active FOR UPDATE`, scope.TenantID, raw.ItemID).Scan(&itemID, &price, &stock, &kind, &currency) != nil {
 				return errors.New("item not found")
 			}
-			if kind == "stocked" && stock < raw.Quantity {
-				return errors.New("insufficient stock")
+			if kind == "stocked" {
+				if err := tx.QueryRow(r.Context(), `SELECT quantity_on_hand FROM branch_inventory WHERE tenant_id=$1 AND branch_id=$2 AND item_id=$3 FOR UPDATE`, scope.TenantID, branchID, itemID).Scan(&stock); err != nil { return errors.New("item is not stocked at this branch") }
+				if stock < raw.Quantity { return errors.New("insufficient stock") }
 			}
 			lineTotal, calcErr := sales.Line{Quantity: raw.Quantity, UnitPriceMinor: price, DiscountMinor: raw.DiscountMinor}.TotalMinor()
 			if calcErr != nil {
@@ -209,11 +218,12 @@ func (s *Server) createSale(w http.ResponseWriter, r *http.Request) {
 			if _, err := tx.Exec(r.Context(), `INSERT INTO sale_lines(id,tenant_id,sale_id,item_id,quantity,unit_price_minor,discount_minor,line_total_minor) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, lineID, scope.TenantID, saleID, item.id, item.qty, item.price, item.discount, item.total); err != nil {
 				return err
 			}
-			if _, err := tx.Exec(r.Context(), `UPDATE catalog_items SET stock_on_hand=stock_on_hand-$1 WHERE tenant_id=$2 AND id=$3 AND kind='stocked'`, item.qty, scope.TenantID, item.id); err != nil {
+			if _, err := tx.Exec(r.Context(), `UPDATE catalog_items SET stock_on_hand=stock_on_hand-$1 WHERE tenant_id=$2 AND id=$3 AND kind='stocked'`, item.qty, scope.TenantID, item.id); err != nil { return err }
+			if _, err := tx.Exec(r.Context(), `UPDATE branch_inventory SET quantity_on_hand=quantity_on_hand-$1,updated_at=now() WHERE tenant_id=$2 AND branch_id=$3 AND item_id=$4`, item.qty, scope.TenantID, branchID, item.id); err != nil {
 				return err
 			}
 			movementID, _ := ids.NewUUIDv7()
-			if _, err := tx.Exec(r.Context(), `INSERT INTO stock_movements(id,tenant_id,item_id,quantity_delta,reason,reference_id) VALUES($1,$2,$3,$4,'sale',$5)`, movementID, scope.TenantID, item.id, -item.qty, saleID); err != nil {
+			if _, err := tx.Exec(r.Context(), `INSERT INTO stock_movements(id,tenant_id,branch_id,item_id,quantity_delta,reason,reference_id) VALUES($1,$2,$3,$4,$5,'sale',$6)`, movementID, scope.TenantID, branchID, item.id, -item.qty, saleID); err != nil {
 				return err
 			}
 			if err := publishCatalogItemChange(r, tx, scope.TenantID, item.id); err != nil {

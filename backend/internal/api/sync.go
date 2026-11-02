@@ -231,6 +231,7 @@ func (s *Server) applyOfflineOperation(r *http.Request, tx pgx.Tx, scope tenancy
 		if err != nil {
 			return "sync.item_missing", "", errors.New("an item in the offline sale no longer exists")
 		}
+		if kind == "stocked" { if err = tx.QueryRow(r.Context(), `SELECT quantity_on_hand FROM branch_inventory WHERE tenant_id=$1 AND branch_id=$2 AND item_id=$3 FOR UPDATE`, scope.TenantID, input.BranchID, raw.ItemID).Scan(&stock); err != nil { return "sync.item_missing", "", errors.New("item is not stocked at this branch") } }
 		if kind == "stocked" && stock < raw.Quantity && !policy.AllowNegative {
 			return "sync.insufficient_stock", "", fmt.Errorf("insufficient stock for item %s", raw.ItemID)
 		}
@@ -262,8 +263,9 @@ func (s *Server) applyOfflineOperation(r *http.Request, tx pgx.Tx, scope tenancy
 			if _, err = tx.Exec(r.Context(), `UPDATE catalog_items SET stock_on_hand=stock_on_hand-$1 WHERE tenant_id=$2 AND id=$3`, line.qty, scope.TenantID, line.id); err != nil {
 				return "sync.stock_write_failed", "", err
 			}
+			if _, err = tx.Exec(r.Context(), `UPDATE branch_inventory SET quantity_on_hand=quantity_on_hand-$1,updated_at=now() WHERE tenant_id=$2 AND branch_id=$3 AND item_id=$4`, line.qty, scope.TenantID, input.BranchID, line.id); err != nil { return "sync.stock_write_failed", "", err }
 			movementID, _ := ids.NewUUIDv7()
-			if _, err = tx.Exec(r.Context(), `INSERT INTO stock_movements(id,tenant_id,item_id,quantity_delta,reason,reference_id) VALUES($1,$2,$3,$4,'offline_sale',$5)`, movementID, scope.TenantID, line.id, -line.qty, op.EntityID); err != nil {
+			if _, err = tx.Exec(r.Context(), `INSERT INTO stock_movements(id,tenant_id,branch_id,item_id,quantity_delta,reason,reference_id) VALUES($1,$2,$3,$4,$5,'offline_sale',$6)`, movementID, scope.TenantID, input.BranchID, line.id, -line.qty, op.EntityID); err != nil {
 				return "sync.stock_write_failed", "", err
 			}
 		}
