@@ -5,7 +5,8 @@ CREATE TABLE IF NOT EXISTS bank_statements (
     account_reference text NOT NULL,
     statement_date date NOT NULL,
     imported_at timestamptz NOT NULL DEFAULT now(),
-    UNIQUE (tenant_id, provider, account_reference, statement_date)
+    UNIQUE (tenant_id, provider, account_reference, statement_date),
+    UNIQUE (tenant_id, id)
 );
 
 CREATE TABLE IF NOT EXISTS bank_statement_lines (
@@ -20,6 +21,7 @@ CREATE TABLE IF NOT EXISTS bank_statement_lines (
     status text NOT NULL DEFAULT 'unmatched'
         CHECK (status IN ('unmatched','matched','exception')),
     UNIQUE (tenant_id, statement_id, id),
+    UNIQUE (tenant_id, id),
     FOREIGN KEY (tenant_id, statement_id) REFERENCES bank_statements(tenant_id, id)
 );
 
