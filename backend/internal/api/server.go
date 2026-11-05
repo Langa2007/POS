@@ -156,6 +156,8 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/v1/import/jobs", s.requireAuth(s.requirePermission("settings.manage", http.HandlerFunc(s.createImportJob))))
 	mux.Handle("POST /api/v1/import/jobs/{jobID}/dry-run", s.requireAuth(s.requirePermission("settings.manage", http.HandlerFunc(s.dryRunImport))))
 	mux.Handle("GET /api/v1/capabilities", s.requireAuth(http.HandlerFunc(s.listCapabilities)))
+	mux.Handle("GET /api/v1/verticals", s.requireAuth(http.HandlerFunc(s.listVerticals)))
+	mux.Handle("PUT /api/v1/verticals/{verticalID}", s.requireAuth(s.requirePermission("settings.manage", http.HandlerFunc(s.setVerticalEnabled))))
 	mux.Handle("GET /api/v1/demo/hello", s.requireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, map[string]string{"message": "hello from demo vertical"}) })))
 	return requestID(recoverer(s.logger, mux))
 }

@@ -1,0 +1,10 @@
+{
+  "id": "hardware",
+  "name": "Hardware & Building Supplies",
+  "version": "0.1.0",
+  "capabilities": ["multi_uom", "cut_to_length", "credit_accounts", "contract_pricing", "quotes", "delivery"],
+  "routes": [{"path": "/hardware", "component": "HardwareView"}],
+  "slots": [{"name": "checkout.sidebar", "component": "HardwareCreditSlot"}],
+  "nav": [{"label": "Hardware", "path": "/hardware", "icon": "building"}],
+  "permissions": ["hardware.read", "hardware.manage", "hardware.credit"]
+}

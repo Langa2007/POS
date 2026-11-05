@@ -1,0 +1,10 @@
+{
+  "id": "fuelstation",
+  "name": "Fuel Station",
+  "version": "0.1.0",
+  "capabilities": ["pump_integration", "tank_dips", "meter_shifts", "pump_reconciliation"],
+  "routes": [{"path": "/fuelstation", "component": "FuelStationView"}],
+  "slots": [{"name": "checkout.sidebar", "component": "PumpReconciliationSlot"}],
+  "nav": [{"label": "Fuel Station", "path": "/fuelstation", "icon": "fuel"}],
+  "permissions": ["fuelstation.read", "fuelstation.manage", "fuelstation.reconcile"]
+}

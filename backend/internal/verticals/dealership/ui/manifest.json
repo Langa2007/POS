@@ -1,0 +1,10 @@
+{
+  "id": "dealership",
+  "name": "Dealership",
+  "version": "0.1.0",
+  "capabilities": ["serial_tracking", "warranty", "trade_ins", "installments", "deposits", "document_packs"],
+  "routes": [{"path": "/dealership", "component": "DealershipView"}],
+  "slots": [{"name": "catalog.details", "component": "WarrantySlot"}],
+  "nav": [{"label": "Dealership", "path": "/dealership", "icon": "car"}],
+  "permissions": ["dealership.read", "dealership.manage", "dealership.finance"]
+}
