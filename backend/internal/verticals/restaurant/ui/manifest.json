@@ -1,0 +1,10 @@
+{
+  "id": "restaurant",
+  "name": "Restaurant",
+  "version": "0.1.0",
+  "capabilities": ["table_service", "kitchen_display", "menu_modifiers", "split_bills", "recipes"],
+  "routes": [{"path": "/restaurant", "component": "RestaurantView"}],
+  "slots": [{"name": "checkout.sidebar", "component": "RestaurantCheckoutSidebar"}],
+  "nav": [{"label": "Restaurant", "path": "/restaurant", "icon": "utensils"}],
+  "permissions": ["restaurant.read", "restaurant.order", "restaurant.manage"]
+}

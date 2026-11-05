@@ -1,0 +1,10 @@
+{
+  "id": "pharmacy",
+  "name": "Pharmacy",
+  "version": "0.1.0",
+  "capabilities": ["batch_tracking", "expiry_tracking", "prescriptions", "controlled_substances", "multi_uom"],
+  "routes": [{"path": "/pharmacy", "component": "PharmacyView"}],
+  "slots": [{"name": "checkout.sidebar", "component": "PharmacyCheckoutSidebar"}],
+  "nav": [{"label": "Pharmacy", "path": "/pharmacy", "icon": "pill"}],
+  "permissions": ["pharmacy.read", "pharmacy.dispense", "pharmacy.manage"]
+}
