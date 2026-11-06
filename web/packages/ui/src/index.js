@@ -1,1 +1,7 @@
-export { default as PosButton } from './PosButton.vue'
+export { default as PosButton   } from './PosButton.vue'
+export { default as PosInput    } from './PosInput.vue'
+export { default as PosSelect   } from './PosSelect.vue'
+export { default as PosDialog   } from './PosDialog.vue'
+export { default as PosToast    } from './PosToast.vue'
+export { default as PosNumpad   } from './PosNumpad.vue'
+export { default as PosSyncBadge} from './PosSyncBadge.vue'

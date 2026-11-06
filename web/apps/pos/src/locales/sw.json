@@ -1,0 +1,112 @@
+{
+  "app": {
+    "name": "Mfumo wa POS",
+    "tagline": "Biashara nzuri inaanza hapa.",
+    "intro": "Mtazamo wazi wa duka lako, wafanyakazi wako, na kila uuzaji — kila kitu mahali pamoja."
+  },
+  "auth": {
+    "signIn": "Ingia",
+    "signingIn": "Inaingia…",
+    "signOut": "Toka",
+    "email": "Anwani ya barua pepe",
+    "password": "Nenosiri",
+    "tenantId": "Kitambulisho cha Mpangaji",
+    "tenantIdPlaceholder": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+    "emailPlaceholder": "wewe@biashara.com",
+    "passwordPlaceholder": "Ingiza nenosiri lako",
+    "welcomeBack": "KARIBU TENA",
+    "signInToWorkspace": "Ingia kwenye nafasi yako ya kazi",
+    "signInHelper": "Tumia akaunti ya mmiliki iliyoundwa wakati wa usanidi.",
+    "protectedNote": "Imelindwa na ufikiaji uliowekewa mipaka ya mpangaji",
+    "sessionExpired": "Kipindi chako kimeisha. Tafadhali ingia tena.",
+    "invalidCredentials": "Barua pepe au nenosiri si sahihi.",
+    "pinLogin": "Kuingia kwa PIN"
+  },
+  "nav": {
+    "checkout": "Malipo",
+    "catalog": "Orodha ya bidhaa",
+    "inventory": "Hifadhi",
+    "reports": "Ripoti",
+    "settings": "Mipangilio",
+    "users": "Watumiaji"
+  },
+  "shift": {
+    "open": "Fungua zamu",
+    "close": "Funga zamu",
+    "opening": "Inafungua…",
+    "opened": "Zamu imefunguliwa. Unaweza kuanza kuuza.",
+    "alreadyOpen": "Zamu iko wazi",
+    "openFirst": "Fungua zamu kabla ya kukamilisha uuzaji.",
+    "openWhileOnline": "Fungua zamu ukiwa umiunganishwa kabla ya kufanya kazi nje ya mtandao."
+  },
+  "sync": {
+    "online": "Mtandaoni",
+    "offline": "Nje ya mtandao",
+    "pending": "{count} inangoja",
+    "queued": "{count} iliyopangwa",
+    "syncNow": "Synchronize sasa",
+    "syncErrors": "Hitilafu {count} ya sync | Hitilafu {count} za sync",
+    "syncSuccess": "Uuzaji {count} wa nje ya mtandao umesync. | Mauzo {count} ya nje ya mtandao yamesync.",
+    "syncFailed": "Mabadiliko ya nje ya mtandao yamehifadhiwa na yatajaribu tena mtandao utarudi.",
+    "reviewErrors": "Uuzaji {count} wa nje ya mtandao unahitaji ukaguzi.",
+    "downloadBundle": "Pakua mfuko wa msaada",
+    "retrySync": "Jaribu sync tena",
+    "retryError": "Jaribu sync iliyokataliwa tena"
+  },
+  "checkout": {
+    "title": "Uuzaji wa sasa",
+    "cart": "Kikapu ({count})",
+    "empty": "Chagua bidhaa kutoka orodha kuanza.",
+    "clear": "Futa",
+    "total": "Jumla",
+    "cashReceived": "Pesa zilizopokelewa",
+    "change": "Chenji",
+    "paymentMethod": "Njia ya malipo",
+    "cash": "Pesa taslimu",
+    "mpesaStk": "M-Pesa STK Push",
+    "mpesaPhone": "Nambari ya M-Pesa ya mteja",
+    "mpesaPhonePlaceholder": "07XXXXXXXX",
+    "completeCash": "Kamilisha uuzaji wa pesa taslimu",
+    "sendPrompt": "Tuma ombi la M-Pesa",
+    "promptSent": "Ombi la STK limetumwa. Mwambie mteja akubaliane nazo kwenye simu yake.",
+    "paymentStatus": "Malipo ya hivi karibuni ya M-Pesa: {status}",
+    "cashMustCover": "Pesa zilizopokelewa lazima zifunike jumla ya uuzaji.",
+    "invalidPhone": "Ingiza nambari sahihi ya simu ya mkononi.",
+    "offlineOnly": "Uuzaji wa pesa taslimu tu unapatikana nje ya mtandao. M-Pesa inahitaji muunganisho wa moja kwa moja.",
+    "offlineLimit": "Muda wa nje ya mtandao umekwisha. Unganisha tena na sync kabla ya kuuza.",
+    "overLimit": "Uuzaji huu unazidi kikomo cha uuzaji nje ya mtandao.",
+    "offlineSaved": "Uuzaji wa pesa taslimu wa nje ya mtandao umehifadhiwa. Risiti {number} · {total} KES. Itasync ukiwa mtandaoni.",
+    "completed": "Uuzaji {id} umekamilika. Chenji: {change} KES"
+  },
+  "catalog": {
+    "title": "Orodha ya bidhaa",
+    "chooseItem": "Chagua bidhaa",
+    "scanSearch": "Scan msimbo au tafuta",
+    "inStock": "{count} zinapatikana",
+    "noMatch": "Hakuna bidhaa inayolingana na msimbo au SKU {value}."
+  },
+  "receipt": {
+    "title": "Risiti ya hivi karibuni",
+    "printLocal": "Chapa kwenye kifaa cha ndani",
+    "printBrowser": "Chapa kwa kivinjari",
+    "printerUrl": "URL ya kichapishaji cha ndani",
+    "printerToken": "Tokeni ya kichapishaji",
+    "printerUnavailable": "Kichapishaji cha ndani hakipatikani: {reason}. Tumia kuchapa kwa kivinjari au angalia wakala wa kuchapa wa ndani.",
+    "printerRejected": "Tokeni ya kichapishaji ilikataliwa.",
+    "sent": "Risiti {number} imetumwa kwa kichapishaji cha ndani."
+  },
+  "reports": {
+    "dailySales": "Mauzo ya leo",
+    "itemsSold": "Bidhaa zilizouzwa",
+    "paymentIntents": "Maombi ya malipo",
+    "acrossCompleted": "Katika mauzo yaliyokamilika",
+    "cashMpesaCredit": "Pesa taslimu, M-Pesa, na mkopo"
+  },
+  "errors": {
+    "generic": "Kitu kimekwenda vibaya. Tafadhali jaribu tena.",
+    "offline": "Uko nje ya mtandao. Baadhi ya vipengele havipo.",
+    "sessionExpired": "Kipindi chako kimeisha. Tafadhali ingia tena."
+  },
+  "language": "Kiswahili"
+}
+

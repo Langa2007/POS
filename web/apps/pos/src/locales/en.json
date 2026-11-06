@@ -1,0 +1,112 @@
+{
+  "app": {
+    "name": "POS Platform",
+    "tagline": "Good business starts here.",
+    "intro": "A clear view of your shop, your people, and every sale — all in one place."
+  },
+  "auth": {
+    "signIn": "Sign in",
+    "signingIn": "Signing in…",
+    "signOut": "Sign out",
+    "email": "Email address",
+    "password": "Password",
+    "tenantId": "Tenant ID",
+    "tenantIdPlaceholder": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+    "emailPlaceholder": "you@business.com",
+    "passwordPlaceholder": "Enter your password",
+    "welcomeBack": "WELCOME BACK",
+    "signInToWorkspace": "Sign in to your workspace",
+    "signInHelper": "Use the owner account created during setup.",
+    "protectedNote": "Protected with tenant-scoped access",
+    "sessionExpired": "Your session has expired. Please sign in again.",
+    "invalidCredentials": "Invalid email or password.",
+    "pinLogin": "PIN login"
+  },
+  "nav": {
+    "checkout": "Checkout",
+    "catalog": "Catalog",
+    "inventory": "Inventory",
+    "reports": "Reports",
+    "settings": "Settings",
+    "users": "Users"
+  },
+  "shift": {
+    "open": "Open shift",
+    "close": "Close shift",
+    "opening": "Opening…",
+    "opened": "Shift opened. You can start selling.",
+    "alreadyOpen": "Shift is open",
+    "openFirst": "Open a shift before completing a sale.",
+    "openWhileOnline": "Open a shift while connected before working offline."
+  },
+  "sync": {
+    "online": "Online",
+    "offline": "Offline",
+    "pending": "{count} pending",
+    "queued": "{count} queued",
+    "syncNow": "Sync now",
+    "syncErrors": "{count} sync error | {count} sync errors",
+    "syncSuccess": "{count} offline sale synced. | {count} offline sales synced.",
+    "syncFailed": "Offline changes are saved locally and will retry when the connection returns.",
+    "reviewErrors": "{count} offline sale needs attention. Review the sync errors below.",
+    "downloadBundle": "Download support bundle",
+    "retrySync": "Retry sync",
+    "retryError": "Retry rejected sync"
+  },
+  "checkout": {
+    "title": "Current sale",
+    "cart": "Cart ({count})",
+    "empty": "Select items from the catalog to begin.",
+    "clear": "Clear",
+    "total": "Total",
+    "cashReceived": "Cash received",
+    "change": "Change",
+    "paymentMethod": "Payment method",
+    "cash": "Cash",
+    "mpesaStk": "M-Pesa STK Push",
+    "mpesaPhone": "Customer M-Pesa number",
+    "mpesaPhonePlaceholder": "07XXXXXXXX",
+    "completeCash": "Complete cash sale",
+    "sendPrompt": "Send M-Pesa prompt",
+    "promptSent": "STK prompt sent. Ask the customer to approve it on their phone.",
+    "paymentStatus": "Latest M-Pesa payment: {status}",
+    "cashMustCover": "Cash received must cover the sale total.",
+    "invalidPhone": "Enter a valid mobile phone number.",
+    "offlineOnly": "Only cash sales are available while offline. M-Pesa requires a live connection.",
+    "offlineLimit": "Offline time limit exceeded. Reconnect and sync before selling.",
+    "overLimit": "This sale exceeds the offline sale limit.",
+    "offlineSaved": "Offline cash sale saved. Receipt {number} · {total} KES. It will sync when online.",
+    "completed": "Sale {id} completed. Change: {change} KES"
+  },
+  "catalog": {
+    "title": "Catalog",
+    "chooseItem": "Choose an item",
+    "scanSearch": "Scan barcode or search",
+    "inStock": "{count} in stock",
+    "noMatch": "No catalog item matches barcode or SKU {value}."
+  },
+  "receipt": {
+    "title": "Latest receipt",
+    "printLocal": "Print on local device",
+    "printBrowser": "Browser print",
+    "printerUrl": "Local printer URL",
+    "printerToken": "Printer token",
+    "printerUnavailable": "Local printer unavailable: {reason}. Use browser printing or check the local print agent.",
+    "printerRejected": "Printer token was rejected.",
+    "sent": "Receipt {number} sent to the local printer."
+  },
+  "reports": {
+    "dailySales": "Today's sales",
+    "itemsSold": "Items sold",
+    "paymentIntents": "Payment intents",
+    "acrossCompleted": "Across completed sales",
+    "cashMpesaCredit": "Cash, M-Pesa, and credit"
+  },
+  "errors": {
+    "generic": "Something went wrong. Please try again.",
+    "offline": "You are offline. Some features are unavailable.",
+    "sessionExpired": "Your session expired. Please sign in again."
+  },
+  "language": "English"
+}
+
