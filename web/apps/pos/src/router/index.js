@@ -37,6 +37,8 @@ export const router = createRouter({
   ],
 })
 
+export default router
+
 // ── Navigation guards ──────────────────────────────────────────────────────
 router.beforeEach(async (to) => {
   const session  = useSessionStore()
@@ -64,4 +66,3 @@ router.beforeEach(async (to) => {
 
   return true
 })
-

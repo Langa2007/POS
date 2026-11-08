@@ -5,7 +5,7 @@
  */
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { PosButton, PosInput, PosSelect, PosNumpad } from '../../../../packages/ui/src/index.js'
+import { PosButton, PosInput, PosSelect, PosDialog } from '../../../../packages/ui/src/index.js'
 import { useSessionStore } from '../stores/session.js'
 import { useConnectivityStore } from '../stores/connectivity.js'
 import { useManifestStore } from '../stores/manifest.js'
@@ -44,6 +44,9 @@ const printToken    = ref(sessionStorage.getItem('pos.printToken')  ?? '')
 
 // ── Reports ─────────────────────────────────────────────────────────────────
 const report = ref(null)
+const productDialog = ref(false)
+const productBusy = ref(false)
+const productForm = ref({ name: '', sku: '', barcode: '', price_minor: '', cost_minor: '', stock_on_hand: '', reorder_level: '' })
 
 // ── Computed ─────────────────────────────────────────────────────────────────
 const total  = computed(() => cart.value.reduce((s, l) => s + l.price_minor * l.quantity, 0))
@@ -79,7 +82,12 @@ onMounted(async () => {
 // ── Cart helpers ─────────────────────────────────────────────────────────────
 function addToCart(item) {
   const existing = cart.value.find(l => l.id === item.id)
-  if (existing) existing.quantity += 1
+  const nextQuantity = (existing?.quantity ?? 0) + 1
+  if (item.kind === 'stocked' && nextQuantity > item.stock_on_hand) {
+    toast.warning(`Only ${item.stock_on_hand} ${item.name} available.`)
+    return
+  }
+  if (existing) existing.quantity = nextQuantity
   else cart.value.push({ ...item, quantity: 1 })
   void setMetadata('current_cart', cart.value)
 }
@@ -91,6 +99,36 @@ function removeFromCart(item) {
   void setMetadata('current_cart', cart.value)
 }
 function clearCart() { cart.value = []; void setMetadata('current_cart', []) }
+
+function openProductDialog() {
+  productForm.value = { name: '', sku: '', barcode: '', price_minor: '', cost_minor: '', stock_on_hand: '', reorder_level: '' }
+  productDialog.value = true
+}
+
+async function createProduct() {
+  productBusy.value = true
+  try {
+    const data = await api.post('/api/v1/catalog/items', {
+      name: productForm.value.name.trim(),
+      sku: productForm.value.sku.trim(),
+      barcode: productForm.value.barcode.trim(),
+      price_minor: Number(productForm.value.price_minor),
+      cost_minor: Number(productForm.value.cost_minor || 0),
+      stock_on_hand: Number(productForm.value.stock_on_hand || 0),
+      reorder_level: Number(productForm.value.reorder_level || 0),
+      kind: 'stocked',
+    })
+    const item = { ...data, barcode: productForm.value.barcode.trim(), currency: manifest.currency, kind: 'stocked', reorder_level: Number(productForm.value.reorder_level || 0) }
+    items.value = [...items.value, item].sort((a, b) => a.name.localeCompare(b.name))
+    await cacheCatalog(items.value)
+    productDialog.value = false
+    toast.success(`${item.name} added to the catalog.`)
+  } catch (err) {
+    toast.error(err.message)
+  } finally {
+    productBusy.value = false
+  }
+}
 
 function scanBarcode() {
   const val = search.value.trim()
@@ -124,6 +162,7 @@ async function checkout() {
     toast.warning(t('checkout.invalidPhone')); return
   }
   try {
+    const soldLines = cart.value.map(line => ({ ...line }))
     if (!saleKey) saleKey = crypto.randomUUID()
     const data = await api.post('/api/v1/sales',
       { shift_id: shiftId.value, payment_method: paymentMethod.value,
@@ -134,6 +173,7 @@ async function checkout() {
     saleKey = ''
     if (paymentMethod.value === 'cash') {
       lastReceipt.value = buildReceipt(data.receipt_number || data.sale_id.slice(0, 8).toUpperCase())
+      await applyLocalStockUpdate(soldLines)
       toast.success(t('checkout.completed', { id: data.sale_id.slice(0, 8), change: change.value }))
       clearCart(); received.value = ''
       return
@@ -145,12 +185,21 @@ async function checkout() {
     )
     paymentKey = ''
     pendingPayment.value = { id: intent.intent_id, status: intent.status }
+    await applyLocalStockUpdate(soldLines)
     toast.info(t('checkout.promptSent'))
     clearCart(); received.value = ''
     void watchPayment(intent.intent_id)
   } catch (err) {
     if (err.status === 502) paymentKey = ''
     toast.error(err.message)
+  }
+
+  async function applyLocalStockUpdate(soldLines) {
+    const sold = new Map(soldLines.map(line => [line.id, line.quantity]))
+    items.value = items.value.map(item => sold.has(item.id)
+      ? { ...item, stock_on_hand: Math.max(0, item.stock_on_hand - sold.get(item.id)) }
+      : item)
+    await cacheCatalog(items.value)
   }
 }
 
@@ -279,13 +328,16 @@ function browserPrint() { window.print() }
             <p class="eyebrow">{{ t('catalog.title').toUpperCase() }}</p>
             <h2>{{ t('catalog.chooseItem') }}</h2>
           </div>
-          <input
-            v-model="search"
-            class="search-input"
-            :aria-label="t('catalog.scanSearch')"
-            :placeholder="t('catalog.scanSearch')"
-            @keydown.enter.prevent="scanBarcode"
-          />
+          <div class="catalog-actions">
+            <input
+              v-model="search"
+              class="search-input"
+              :aria-label="t('catalog.scanSearch')"
+              :placeholder="t('catalog.scanSearch')"
+              @keydown.enter.prevent="scanBarcode"
+            />
+            <PosButton variant="secondary" @click="openProductDialog">+ Product</PosButton>
+          </div>
         </div>
         <div class="product-grid" role="list">
           <button
@@ -295,11 +347,12 @@ function browserPrint() { window.print() }
             @click="addToCart(item)"
           >
             <strong>{{ item.name }}</strong>
-            <span>{{ item.sku }}</span>
+            <span>{{ item.sku }}<template v-if="item.barcode"> · {{ item.barcode }}</template></span>
             <b>{{ item.price_minor }} {{ manifest.currency }}</b>
             <small>{{ t('catalog.inStock', { count: item.stock_on_hand }) }}</small>
           </button>
         </div>
+        <p v-if="!filteredItems.length" class="catalog-empty">No products match this search. Scan a barcode or add the product.</p>
       </section>
 
       <!-- Cart -->
@@ -321,8 +374,9 @@ function browserPrint() { window.print() }
           <div class="quantity">
             <button @click="removeFromCart(line)" :aria-label="`Decrease ${line.name} quantity`">−</button>
             <b>{{ line.quantity }}</b>
-            <button @click="addToCart(line)"    :aria-label="`Increase ${line.name} quantity`">+</button>
+            <button :disabled="line.kind === 'stocked' && line.quantity >= line.stock_on_hand" @click="addToCart(line)" :aria-label="`Increase ${line.name} quantity`">+</button>
           </div>
+          <strong class="line-total">{{ line.price_minor * line.quantity }} {{ manifest.currency }}</strong>
         </div>
 
         <div class="cart-total">
@@ -394,6 +448,25 @@ function browserPrint() { window.print() }
         <strong class="rt-row"><span>Change</span><span>{{ lastReceipt.change_minor }} {{ manifest.currency }}</span></strong>
       </div>
     </section>
+
+    <PosDialog :open="productDialog" title="Capture product" size="md" @close="productDialog = false">
+      <form class="product-form" @submit.prevent="createProduct">
+        <p class="form-helper">Add a sellable item to the catalog. Prices and stock use minor currency units, matching the backend.</p>
+        <PosInput v-model="productForm.name" label="Product name" placeholder="e.g. Premium bread" required />
+        <div class="form-grid">
+          <PosInput v-model="productForm.sku" label="SKU" placeholder="e.g. BREAD-001" required />
+          <PosInput v-model="productForm.barcode" label="Barcode" placeholder="Scan or type barcode" />
+          <PosInput v-model="productForm.price_minor" label="Selling price (minor)" type="number" min="0" required />
+          <PosInput v-model="productForm.cost_minor" label="Cost (minor)" type="number" min="0" />
+          <PosInput v-model="productForm.stock_on_hand" label="Opening stock" type="number" min="0" />
+          <PosInput v-model="productForm.reorder_level" label="Reorder level" type="number" min="0" />
+        </div>
+        <div class="dialog-actions">
+          <PosButton type="button" variant="secondary" @click="productDialog = false">Cancel</PosButton>
+          <PosButton type="submit" :disabled="productBusy">{{ productBusy ? 'Saving…' : 'Save product' }}</PosButton>
+        </div>
+      </form>
+    </PosDialog>
   </div>
 </template>
 
@@ -408,6 +481,7 @@ function browserPrint() { window.print() }
 .catalog-panel, .cart-panel { background:white; border:1px solid #e8ebef; border-radius:14px; padding:22px; }
 .panel-heading { display:flex; justify-content:space-between; align-items:center; gap:14px; margin-bottom:18px; }
 .panel-heading h2 { font-size:18px; margin:7px 0 0; }
+.catalog-actions { display:flex; align-items:center; gap:8px; }
 .search-input { height:42px; border:1px solid #dfe5e9; border-radius:8px; padding:0 11px; font:inherit; font-size:12px; outline:none; }
 .search-input:focus { border-color:#31a88a; }
 .product-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:10px; }
@@ -416,12 +490,16 @@ function browserPrint() { window.print() }
 .product-card:disabled { opacity:.5; cursor:not-allowed; }
 .product-card span,.product-card small { font-size:10px; color:#8a969d; }
 .product-card b { font-size:13px; color:#13765f; }
+.product-card span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.catalog-empty { padding:32px 10px; text-align:center; color:#8a969d; font-size:12px; }
 .cart-empty { padding:36px 10px; text-align:center; color:#8a969d; font-size:12px; }
 .cart-line { display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #eef0f2; padding:11px 0; gap:10px; }
 .cart-line > div:first-child { display:grid; gap:3px; }
 .cart-line small { font-size:10px; color:#8a969d; }
 .quantity { display:flex; align-items:center; gap:9px; }
 .quantity button,.clear-button { border:0; background:#edf3f1; color:#176c57; border-radius:6px; min-width:28px; height:28px; cursor:pointer; }
+.quantity button:disabled { opacity:.4; cursor:not-allowed; }
+.line-total { margin-left:auto; white-space:nowrap; font-size:12px; color:#176c57; }
 .clear-button { background:transparent; font-size:11px; }
 .cart-total { display:flex; justify-content:space-between; border-top:2px solid #dfe9e5; margin-top:16px; padding-top:14px; font-size:14px; }
 .cart-total strong { font-size:20px; color:#126b55; }
@@ -435,9 +513,13 @@ function browserPrint() { window.print() }
 .receipt-lines > div { display:flex; justify-content:space-between; font-size:13px; }
 .receipt-totals { padding-top:10px; border-top:1px solid #e2e8f0; }
 .rt-row { display:flex; justify-content:space-between; font-size:13px; }
+.product-form { display:grid; gap:16px; }
+.form-helper { margin:0; color:#697586; font-size:12px; line-height:1.5; }
+.form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+.dialog-actions { display:flex; justify-content:flex-end; gap:10px; padding-top:4px; }
 /* Responsive */
 @media (max-width: 900px) { .commerce-grid { grid-template-columns:1fr; } .cart-panel { order:-1; } }
-@media (max-width: 600px) { .summary-grid { grid-template-columns:1fr; } }
+@media (max-width: 600px) { .summary-grid { grid-template-columns:1fr; } .catalog-actions { align-items:stretch; flex-direction:column; } .form-grid { grid-template-columns:1fr; } .line-total { display:none; } }
 @media print {
   body * { visibility:hidden!important; }
   .receipt-preview,.receipt-preview * { visibility:visible!important; }
@@ -445,4 +527,3 @@ function browserPrint() { window.print() }
   .print-controls { display:none!important; }
 }
 </style>
-
