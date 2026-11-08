@@ -12,7 +12,7 @@
     "password": "Password",
     "tenantId": "Tenant ID",
     "tenantIdPlaceholder": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
-    "emailPlaceholder": "you@business.com",
+    "emailPlaceholder": "you{'@'}business.com",
     "passwordPlaceholder": "Enter your password",
     "welcomeBack": "WELCOME BACK",
     "signInToWorkspace": "Sign in to your workspace",
@@ -109,4 +109,3 @@
   },
   "language": "English"
 }
-

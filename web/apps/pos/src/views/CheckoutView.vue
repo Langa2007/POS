@@ -108,12 +108,16 @@ function openProductDialog() {
 async function createProduct() {
   productBusy.value = true
   try {
+    const sellingPrice = Number(productForm.value.price_minor)
+    const costPrice = Number(productForm.value.cost_minor || 0)
+    if (!Number.isFinite(sellingPrice) || sellingPrice < 0) throw new Error('Enter a valid selling price.')
+    if (!Number.isFinite(costPrice) || costPrice < 0) throw new Error('Enter a valid item cost.')
     const data = await api.post('/api/v1/catalog/items', {
       name: productForm.value.name.trim(),
       sku: productForm.value.sku.trim(),
       barcode: productForm.value.barcode.trim(),
-      price_minor: Number(productForm.value.price_minor),
-      cost_minor: Number(productForm.value.cost_minor || 0),
+      price_minor: Math.round(sellingPrice * 100),
+      cost_minor: Math.round(costPrice * 100),
       stock_on_hand: Number(productForm.value.stock_on_hand || 0),
       reorder_level: Number(productForm.value.reorder_level || 0),
       kind: 'stocked',
@@ -350,6 +354,7 @@ function browserPrint() { window.print() }
             <span>{{ item.sku }}<template v-if="item.barcode"> · {{ item.barcode }}</template></span>
             <b>{{ item.price_minor }} {{ manifest.currency }}</b>
             <small>{{ t('catalog.inStock', { count: item.stock_on_hand }) }}</small>
+            <small v-if="item.low_stock" class="low-stock">Low stock · reorder soon</small>
           </button>
         </div>
         <p v-if="!filteredItems.length" class="catalog-empty">No products match this search. Scan a barcode or add the product.</p>
@@ -451,15 +456,15 @@ function browserPrint() { window.print() }
 
     <PosDialog :open="productDialog" title="Capture product" size="md" @close="productDialog = false">
       <form class="product-form" @submit.prevent="createProduct">
-        <p class="form-helper">Add a sellable item to the catalog. Prices and stock use minor currency units, matching the backend.</p>
+        <p class="form-helper">The selling price is fixed at checkout. Enter money in KES; the system stores cents safely in the backend.</p>
         <PosInput v-model="productForm.name" label="Product name" placeholder="e.g. Premium bread" required />
         <div class="form-grid">
           <PosInput v-model="productForm.sku" label="SKU" placeholder="e.g. BREAD-001" required />
           <PosInput v-model="productForm.barcode" label="Barcode" placeholder="Scan or type barcode" />
-          <PosInput v-model="productForm.price_minor" label="Selling price (minor)" type="number" min="0" required />
-          <PosInput v-model="productForm.cost_minor" label="Cost (minor)" type="number" min="0" />
-          <PosInput v-model="productForm.stock_on_hand" label="Opening stock" type="number" min="0" />
-          <PosInput v-model="productForm.reorder_level" label="Reorder level" type="number" min="0" />
+          <PosInput v-model="productForm.price_minor" label="Selling price (KES)" hint="Fixed customer price, e.g. 125.50" type="number" min="0" step="0.01" required />
+          <PosInput v-model="productForm.cost_minor" label="Your cost (KES)" hint="What you paid per item; used for margin and stock value." type="number" min="0" step="0.01" />
+          <PosInput v-model="productForm.stock_on_hand" label="Opening stock (items)" hint="How many units are currently in the shop." type="number" min="0" step="1" />
+          <PosInput v-model="productForm.reorder_level" label="Reorder when stock reaches (items)" hint="Low-stock threshold; use 0 to disable the reminder." type="number" min="0" step="1" />
         </div>
         <div class="dialog-actions">
           <PosButton type="button" variant="secondary" @click="productDialog = false">Cancel</PosButton>
@@ -491,6 +496,7 @@ function browserPrint() { window.print() }
 .product-card span,.product-card small { font-size:10px; color:#8a969d; }
 .product-card b { font-size:13px; color:#13765f; }
 .product-card span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.product-card .low-stock { color:#b45309; font-weight:700; }
 .catalog-empty { padding:32px 10px; text-align:center; color:#8a969d; font-size:12px; }
 .cart-empty { padding:36px 10px; text-align:center; color:#8a969d; font-size:12px; }
 .cart-line { display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #eef0f2; padding:11px 0; gap:10px; }

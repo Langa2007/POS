@@ -12,7 +12,7 @@
     "password": "Nenosiri",
     "tenantId": "Kitambulisho cha Mpangaji",
     "tenantIdPlaceholder": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
-    "emailPlaceholder": "wewe@biashara.com",
+    "emailPlaceholder": "wewe{'@'}biashara.com",
     "passwordPlaceholder": "Ingiza nenosiri lako",
     "welcomeBack": "KARIBU TENA",
     "signInToWorkspace": "Ingia kwenye nafasi yako ya kazi",
@@ -109,4 +109,3 @@
   },
   "language": "Kiswahili"
 }
-
