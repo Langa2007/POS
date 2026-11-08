@@ -131,7 +131,7 @@ function editItem(item) {
 async function saveItem() {
   try {
     const form = editingItem.value
-    const data = await api.put(`/api/v1/catalog/items/${form.id}`, { name: form.name.trim(), sku: form.sku.trim(), barcode: form.barcode?.trim() ?? '', price_minor: Math.round(Number(form.price_minor) * 100), cost_minor: Math.round(Number(form.cost_minor || 0) * 100), stock_on_hand: Number(form.stock_on_hand), reorder_level: Number(form.reorder_level), kind: form.kind }, { headers: { Authorization: `Bearer ${sudoToken.value}` } })
+    const data = await api.put(`/api/v1/catalog/items/${form.id}`, { name: form.name.trim(), sku: form.sku.trim(), barcode: form.barcode?.trim() ?? '', price_minor: Math.round(Number(form.price_minor) * 100), cost_minor: Math.round(Number(form.cost_minor || 0) * 100), reorder_level: Number(form.reorder_level), kind: form.kind }, { headers: { Authorization: `Bearer ${sudoToken.value}` } })
     const index = items.value.findIndex(item => item.id === form.id)
     if (index >= 0) items.value[index] = { ...items.value[index], ...data, barcode: form.barcode, cost_minor: Math.round(Number(form.cost_minor || 0) * 100) }
     await cacheCatalog(items.value)
@@ -166,7 +166,8 @@ async function createProduct() {
       reorder_level: Number(productForm.value.reorder_level || 0),
       kind: 'stocked',
     })
-    const item = { ...data, barcode: productForm.value.barcode.trim(), currency: manifest.currency, kind: 'stocked', reorder_level: Number(productForm.value.reorder_level || 0) }
+    const primaryBarcode = productForm.value.barcode.trim()
+    const item = { ...data, barcode: primaryBarcode, barcodes: primaryBarcode ? [primaryBarcode] : [], currency: manifest.currency, kind: 'stocked', reorder_level: Number(productForm.value.reorder_level || 0) }
     items.value = [...items.value, item].sort((a, b) => a.name.localeCompare(b.name))
     await cacheCatalog(items.value)
     productDialog.value = false
@@ -181,10 +182,20 @@ async function createProduct() {
 function scanBarcode() {
   const val = search.value.trim()
   if (!val) return
-  const item = items.value.find(i => i.barcode === val || i.sku?.toLowerCase() === val.toLowerCase())
+  const item = items.value.find(i => i.barcode === val || i.barcodes?.includes(val) || i.sku?.toLowerCase() === val.toLowerCase())
   if (!item) { toast.error(t('catalog.noMatch', { value: val })); return }
   addToCart(item)
   search.value = ''
+}
+async function addBarcode(item) {
+  const barcode = window.prompt(`Add another barcode for ${item.name}`)
+  if (!barcode?.trim()) return
+  try {
+    await api.post(`/api/v1/catalog/items/${item.id}/barcodes`, { barcode: barcode.trim() }, { headers: { Authorization: `Bearer ${sudoToken.value}` } })
+    item.barcodes = [...new Set([...(item.barcodes ?? []), barcode.trim()])]
+    await cacheCatalog(items.value)
+    toast.success('Barcode linked to this product.')
+  } catch (err) { toast.error(err.message) }
 }
 function handleSearchInput() {
   clearTimeout(scanTimer)
@@ -538,13 +549,14 @@ function browserPrint() { window.print() }
         <p class="form-helper">These actions are separate from the customer checkout cart.</p>
         <article v-for="item in items" :key="item.id" class="manage-row">
           <div><strong>{{ item.name }}</strong><small>{{ item.sku }} · {{ formatMoney(item.price_minor) }} {{ manifest.currency }} · {{ item.stock_on_hand }} in stock</small></div>
-          <div class="manage-actions"><PosButton variant="secondary" @click="editItem(item)">Edit</PosButton><PosButton variant="secondary" @click="deleteItem(item)">Delete</PosButton></div>
+        <div class="manage-actions"><PosButton variant="secondary" @click="addBarcode(item)">+ Barcode</PosButton><PosButton variant="secondary" @click="editItem(item)">Edit</PosButton><PosButton variant="secondary" @click="deleteItem(item)">Delete</PosButton></div>
         </article>
       </div>
       <form v-else class="product-form" @submit.prevent="saveItem">
         <p class="form-helper">Changes affect future sales. Existing receipts remain unchanged.</p>
         <PosInput v-model="editingItem.name" label="Product name" required />
-        <div class="form-grid"><PosInput v-model="editingItem.sku" label="SKU" required /><PosInput v-model="editingItem.barcode" label="Barcode" /><PosInput v-model="editingItem.price_minor" label="Selling price (KES)" type="number" step="0.01" required /><PosInput v-model="editingItem.cost_minor" label="Your cost (KES)" type="number" step="0.01" /><PosInput v-model="editingItem.stock_on_hand" label="Stock (items)" type="number" min="0" /><PosInput v-model="editingItem.reorder_level" label="Reorder level (items)" type="number" min="0" /></div>
+        <div class="form-grid"><PosInput v-model="editingItem.sku" label="SKU" required /><PosInput v-model="editingItem.barcode" label="Primary barcode" /><PosInput v-model="editingItem.price_minor" label="Selling price (KES)" type="number" step="0.01" required /><PosInput v-model="editingItem.cost_minor" label="Your cost (KES)" type="number" step="0.01" /><PosInput v-model="editingItem.reorder_level" label="Reorder level (items)" type="number" min="0" /></div>
+        <p class="form-helper">Stock is controlled by receiving and sales; it cannot be edited here.</p>
         <div class="dialog-actions"><PosButton type="button" variant="secondary" @click="editingItem = null">Cancel</PosButton><PosButton type="submit">Save changes</PosButton></div>
       </form>
     </PosDialog>

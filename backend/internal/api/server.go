@@ -94,6 +94,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/v1/catalog/items", s.requireAuth(s.requirePermission("catalog.manage", http.HandlerFunc(s.createItem))))
 	mux.Handle("PUT /api/v1/catalog/items/{itemID}", s.requireAuth(s.requirePermission("catalog.manage", http.HandlerFunc(s.updateItem))))
 	mux.Handle("DELETE /api/v1/catalog/items/{itemID}", s.requireAuth(s.requirePermission("catalog.manage", http.HandlerFunc(s.deleteItem))))
+	mux.Handle("POST /api/v1/catalog/items/{itemID}/barcodes", s.requireAuth(s.requirePermission("catalog.manage", http.HandlerFunc(s.addItemBarcode))))
 	mux.Handle("POST /api/v1/shifts", s.requireAuth(s.requirePermission("sales.shift", http.HandlerFunc(s.openShift))))
 	mux.Handle("POST /api/v1/shifts/{shiftID}/close", s.requireAuth(s.requirePermission("sales.shift", http.HandlerFunc(s.closeShift))))
 	mux.Handle("POST /api/v1/sales", s.requireAuth(s.requirePermission("sales.create", http.HandlerFunc(s.createSale))))
@@ -163,7 +164,9 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/v1/payouts/{payoutID}/approve", s.requireAuth(s.requirePermission("payouts.approve", http.HandlerFunc(s.approvePayout))))
 	mux.Handle("GET /api/v1/verticals", s.requireAuth(http.HandlerFunc(s.listVerticals)))
 	mux.Handle("PUT /api/v1/verticals/{verticalID}", s.requireAuth(s.requirePermission("settings.manage", http.HandlerFunc(s.setVerticalEnabled))))
-	mux.Handle("GET /api/v1/demo/hello", s.requireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, map[string]string{"message": "hello from demo vertical"}) })))
+	mux.Handle("GET /api/v1/demo/hello", s.requireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, 200, map[string]string{"message": "hello from demo vertical"})
+	})))
 	return requestID(recoverer(s.logger, mux))
 }
 

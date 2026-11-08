@@ -43,18 +43,26 @@ func (s *Server) catalog(w http.ResponseWriter, r *http.Request) {
 	}
 	items := make([]map[string]any, 0)
 	err = s.db.TenantTx(r.Context(), scope.TenantID, func(tx pgx.Tx) error {
-		rows, err := tx.Query(r.Context(), `SELECT ci.id::text,ci.name,ci.sku,COALESCE(ci.barcode,''),ci.price_minor,ci.cost_minor,ci.currency,COALESCE(bi.quantity_on_hand,ci.stock_on_hand),ci.reorder_level,COALESCE(ci.category_id::text,''),ci.kind FROM catalog_items ci LEFT JOIN branch_inventory bi ON bi.tenant_id=ci.tenant_id AND bi.item_id=ci.id AND bi.branch_id=NULLIF($4,'')::uuid WHERE ci.tenant_id=$1 AND ci.active AND ($2='' OR lower(ci.name) LIKE lower('%'||$2||'%') OR ci.sku ILIKE '%'||$2||'%' OR ci.barcode=$2) ORDER BY ci.name LIMIT $3`, scope.TenantID, query, limit, scope.BranchID)
+		rows, err := tx.Query(r.Context(), `SELECT ci.id::text,ci.name,ci.sku,COALESCE(ci.barcode,''),COALESCE((SELECT jsonb_agg(cib.barcode ORDER BY cib.barcode) FROM catalog_item_barcodes cib WHERE cib.tenant_id=ci.tenant_id AND cib.item_id=ci.id),'[]'::jsonb),ci.price_minor,ci.cost_minor,ci.currency,COALESCE(bi.quantity_on_hand,ci.stock_on_hand),ci.reorder_level,COALESCE(ci.category_id::text,''),ci.kind FROM catalog_items ci LEFT JOIN branch_inventory bi ON bi.tenant_id=ci.tenant_id AND bi.item_id=ci.id AND bi.branch_id=NULLIF($4,'')::uuid WHERE ci.tenant_id=$1 AND ci.active AND ($2='' OR lower(ci.name) LIKE lower('%'||$2||'%') OR ci.sku ILIKE '%'||$2||'%' OR ci.barcode=$2 OR EXISTS (SELECT 1 FROM catalog_item_barcodes sq WHERE sq.tenant_id=ci.tenant_id AND sq.item_id=ci.id AND sq.barcode=$2)) ORDER BY ci.name LIMIT $3`, scope.TenantID, query, limit, scope.BranchID)
 		if err != nil {
 			return err
 		}
 		defer rows.Close()
 		for rows.Next() {
 			var id, name, sku, barcode, currency, category, kind string
+			var barcodesJSON []byte
 			var price, cost, stock, reorder int64
-			if err := rows.Scan(&id, &name, &sku, &barcode, &price, &cost, &currency, &stock, &reorder, &category, &kind); err != nil {
+			if err := rows.Scan(&id, &name, &sku, &barcode, &barcodesJSON, &price, &cost, &currency, &stock, &reorder, &category, &kind); err != nil {
 				return err
 			}
-			items = append(items, map[string]any{"id": id, "name": name, "sku": sku, "barcode": barcode, "price_minor": price, "cost_minor": cost, "currency": currency, "stock_on_hand": stock, "reorder_level": reorder, "category_id": category, "kind": kind, "low_stock": stock <= reorder})
+			var barcodes []string
+			if err := json.Unmarshal(barcodesJSON, &barcodes); err != nil {
+				return err
+			}
+			if barcode != "" && len(barcodes) == 0 {
+				barcodes = []string{barcode}
+			}
+			items = append(items, map[string]any{"id": id, "name": name, "sku": sku, "barcode": barcode, "barcodes": barcodes, "price_minor": price, "cost_minor": cost, "currency": currency, "stock_on_hand": stock, "reorder_level": reorder, "category_id": category, "kind": kind, "low_stock": stock <= reorder})
 		}
 		return rows.Err()
 	})
@@ -92,6 +100,11 @@ func (s *Server) createItem(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
+		if barcode := strings.TrimSpace(input.Barcode); barcode != "" {
+			if _, err := tx.Exec(r.Context(), `INSERT INTO catalog_item_barcodes(tenant_id,item_id,barcode) VALUES($1,$2,$3)`, scope.TenantID, itemID, barcode); err != nil {
+				return err
+			}
+		}
 		if err = publishCatalogItemChange(r, tx, scope.TenantID, itemID); err != nil {
 			return err
 		}
@@ -100,7 +113,9 @@ func (s *Server) createItem(w http.ResponseWriter, r *http.Request) {
 			_ = tx.QueryRow(r.Context(), `SELECT id::text FROM branches WHERE tenant_id=$1 ORDER BY created_at,id LIMIT 1`, scope.TenantID).Scan(&branchID)
 		}
 		if input.Kind == "stocked" && branchID != "" {
-			if _, err = tx.Exec(r.Context(), `INSERT INTO branch_inventory(tenant_id,branch_id,item_id,quantity_on_hand) VALUES($1,$2,$3,$4) ON CONFLICT(tenant_id,branch_id,item_id) DO UPDATE SET quantity_on_hand=excluded.quantity_on_hand,updated_at=now()`, scope.TenantID, branchID, itemID, input.StockOnHand); err != nil { return err }
+			if _, err = tx.Exec(r.Context(), `INSERT INTO branch_inventory(tenant_id,branch_id,item_id,quantity_on_hand) VALUES($1,$2,$3,$4) ON CONFLICT(tenant_id,branch_id,item_id) DO UPDATE SET quantity_on_hand=excluded.quantity_on_hand,updated_at=now()`, scope.TenantID, branchID, itemID, input.StockOnHand); err != nil {
+				return err
+			}
 		}
 		if input.StockOnHand > 0 {
 			movementID, _ := ids.NewUUIDv7()
@@ -124,55 +139,117 @@ func (s *Server) createItem(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 201, map[string]any{"id": itemID, "name": input.Name, "sku": input.SKU, "price_minor": input.PriceMinor, "stock_on_hand": input.StockOnHand})
 }
 
-func (s *Server) updateItem(w http.ResponseWriter, r *http.Request) {
+func (s *Server) addItemBarcode(w http.ResponseWriter, r *http.Request) {
 	scope, err := tenancy.Require(r.Context())
-	if err != nil { writeError(w, 401, "auth.required", "A valid bearer token is required"); return }
-	itemID := r.PathValue("itemID")
-	if !uuidPattern.MatchString(itemID) { writeError(w, 400, "catalog.invalid_item", "A valid item ID is required"); return }
-	var input itemInput
-	if json.NewDecoder(http.MaxBytesReader(w, r.Body, 16*1024)).Decode(&input) != nil || strings.TrimSpace(input.Name) == "" || strings.TrimSpace(input.SKU) == "" || input.PriceMinor < 0 || input.CostMinor < 0 || input.StockOnHand < 0 || input.ReorderLevel < 0 {
-		writeError(w, 400, "catalog.invalid_item", "Name, SKU, price, cost, stock, and reorder level must be valid")
+	if err != nil {
+		writeError(w, 401, "auth.required", "A valid bearer token is required")
 		return
 	}
-	if input.Kind == "" { input.Kind = "stocked" }
-	if input.Kind != "stocked" && input.Kind != "service" && input.Kind != "non_inventory" {
-		writeError(w, 400, "catalog.invalid_item", "Unsupported item kind"); return
+	itemID := r.PathValue("itemID")
+	var input struct {
+		Barcode string `json:"barcode"`
+	}
+	if !uuidPattern.MatchString(itemID) || json.NewDecoder(http.MaxBytesReader(w, r.Body, 4*1024)).Decode(&input) != nil || strings.TrimSpace(input.Barcode) == "" {
+		writeError(w, 400, "catalog.invalid_barcode", "A valid barcode is required")
+		return
 	}
 	err = s.db.TenantTx(r.Context(), scope.TenantID, func(tx pgx.Tx) error {
-		tag, execErr := tx.Exec(r.Context(), `UPDATE catalog_items SET name=$1,sku=$2,barcode=NULLIF($3,''),price_minor=$4,cost_minor=$5,stock_on_hand=$6,reorder_level=$7,kind=$8 WHERE tenant_id=$9 AND id=$10 AND active`, strings.TrimSpace(input.Name), strings.TrimSpace(input.SKU), strings.TrimSpace(input.Barcode), input.PriceMinor, input.CostMinor, input.StockOnHand, input.ReorderLevel, input.Kind, scope.TenantID, itemID)
-		if execErr != nil { return execErr }
-		if tag.RowsAffected() == 0 { return pgx.ErrNoRows }
-		branchID := scope.BranchID
-		if branchID == "" { _ = tx.QueryRow(r.Context(), `SELECT id::text FROM branches WHERE tenant_id=$1 ORDER BY created_at,id LIMIT 1`, scope.TenantID).Scan(&branchID) }
-		if input.Kind == "stocked" && branchID != "" {
-			_, execErr = tx.Exec(r.Context(), `INSERT INTO branch_inventory(tenant_id,branch_id,item_id,quantity_on_hand) VALUES($1,$2,$3,$4) ON CONFLICT(tenant_id,branch_id,item_id) DO UPDATE SET quantity_on_hand=excluded.quantity_on_hand,updated_at=now()`, scope.TenantID, branchID, itemID, input.StockOnHand)
-			if execErr != nil { return execErr }
+		_, err := tx.Exec(r.Context(), `INSERT INTO catalog_item_barcodes(tenant_id,item_id,barcode) SELECT $1,$2,$3 WHERE EXISTS (SELECT 1 FROM catalog_items WHERE tenant_id=$1 AND id=$2 AND active)`, scope.TenantID, itemID, strings.TrimSpace(input.Barcode))
+		return err
+	})
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			writeError(w, 409, "catalog.duplicate", "That barcode is already assigned")
+			return
+		}
+		s.logger.Error("add catalog barcode", "error", err)
+		writeError(w, 400, "catalog.barcode_failed", "Barcode could not be added")
+		return
+	}
+	writeJSON(w, 201, map[string]any{"item_id": itemID, "barcode": strings.TrimSpace(input.Barcode)})
+}
+
+func (s *Server) updateItem(w http.ResponseWriter, r *http.Request) {
+	scope, err := tenancy.Require(r.Context())
+	if err != nil {
+		writeError(w, 401, "auth.required", "A valid bearer token is required")
+		return
+	}
+	itemID := r.PathValue("itemID")
+	if !uuidPattern.MatchString(itemID) {
+		writeError(w, 400, "catalog.invalid_item", "A valid item ID is required")
+		return
+	}
+	var input itemInput
+	if json.NewDecoder(http.MaxBytesReader(w, r.Body, 16*1024)).Decode(&input) != nil || strings.TrimSpace(input.Name) == "" || strings.TrimSpace(input.SKU) == "" || input.PriceMinor < 0 || input.CostMinor < 0 || input.ReorderLevel < 0 {
+		writeError(w, 400, "catalog.invalid_item", "Name, SKU, price, cost, and reorder level must be valid")
+		return
+	}
+	if input.Kind == "" {
+		input.Kind = "stocked"
+	}
+	if input.Kind != "stocked" && input.Kind != "service" && input.Kind != "non_inventory" {
+		writeError(w, 400, "catalog.invalid_item", "Unsupported item kind")
+		return
+	}
+	err = s.db.TenantTx(r.Context(), scope.TenantID, func(tx pgx.Tx) error {
+		tag, execErr := tx.Exec(r.Context(), `UPDATE catalog_items SET name=$1,sku=$2,barcode=NULLIF($3,''),price_minor=$4,cost_minor=$5,reorder_level=$6,kind=$7 WHERE tenant_id=$8 AND id=$9 AND active`, strings.TrimSpace(input.Name), strings.TrimSpace(input.SKU), strings.TrimSpace(input.Barcode), input.PriceMinor, input.CostMinor, input.ReorderLevel, input.Kind, scope.TenantID, itemID)
+		if execErr != nil {
+			return execErr
+		}
+		if tag.RowsAffected() == 0 {
+			return pgx.ErrNoRows
 		}
 		return publishCatalogItemChange(r, tx, scope.TenantID, itemID)
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" { writeError(w, 409, "catalog.duplicate", "An item with this SKU or barcode already exists"); return }
-		if errors.Is(err, pgx.ErrNoRows) { writeError(w, 404, "catalog.not_found", "Product was not found"); return }
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			writeError(w, 409, "catalog.duplicate", "An item with this SKU or barcode already exists")
+			return
+		}
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeError(w, 404, "catalog.not_found", "Product was not found")
+			return
+		}
 		s.logger.Error("update catalog item", "error", err)
-		writeError(w, 400, "catalog.update_failed", "Product could not be updated"); return
+		writeError(w, 400, "catalog.update_failed", "Product could not be updated")
+		return
 	}
 	writeJSON(w, 200, map[string]any{"id": itemID, "name": input.Name, "sku": input.SKU, "price_minor": input.PriceMinor, "stock_on_hand": input.StockOnHand, "reorder_level": input.ReorderLevel})
 }
 
 func (s *Server) deleteItem(w http.ResponseWriter, r *http.Request) {
 	scope, err := tenancy.Require(r.Context())
-	if err != nil { writeError(w, 401, "auth.required", "A valid bearer token is required"); return }
+	if err != nil {
+		writeError(w, 401, "auth.required", "A valid bearer token is required")
+		return
+	}
 	itemID := r.PathValue("itemID")
-	if !uuidPattern.MatchString(itemID) { writeError(w, 400, "catalog.invalid_item", "A valid item ID is required"); return }
+	if !uuidPattern.MatchString(itemID) {
+		writeError(w, 400, "catalog.invalid_item", "A valid item ID is required")
+		return
+	}
 	err = s.db.TenantTx(r.Context(), scope.TenantID, func(tx pgx.Tx) error {
 		tag, execErr := tx.Exec(r.Context(), `UPDATE catalog_items SET active=false WHERE tenant_id=$1 AND id=$2 AND active`, scope.TenantID, itemID)
-		if execErr != nil { return execErr }
-		if tag.RowsAffected() == 0 { return pgx.ErrNoRows }
+		if execErr != nil {
+			return execErr
+		}
+		if tag.RowsAffected() == 0 {
+			return pgx.ErrNoRows
+		}
 		return nil
 	})
-	if errors.Is(err, pgx.ErrNoRows) { writeError(w, 404, "catalog.not_found", "Product was not found"); return }
-	if err != nil { s.logger.Error("delete catalog item", "error", err); writeError(w, 400, "catalog.delete_failed", "Product could not be deleted"); return }
+	if errors.Is(err, pgx.ErrNoRows) {
+		writeError(w, 404, "catalog.not_found", "Product was not found")
+		return
+	}
+	if err != nil {
+		s.logger.Error("delete catalog item", "error", err)
+		writeError(w, 400, "catalog.delete_failed", "Product could not be deleted")
+		return
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -226,7 +303,9 @@ func (s *Server) createSale(w http.ResponseWriter, r *http.Request) {
 		if branchID == "" && tx.QueryRow(r.Context(), `SELECT id::text FROM branches WHERE tenant_id=$1 ORDER BY created_at LIMIT 1`, scope.TenantID).Scan(&branchID) != nil {
 			return errors.New("branch is required")
 		}
-		if scope.BranchID != "" && scope.BranchID != branchID { return errors.New("branch is outside the authenticated scope") }
+		if scope.BranchID != "" && scope.BranchID != branchID {
+			return errors.New("branch is outside the authenticated scope")
+		}
 		shiftID := input.ShiftID
 		if shiftID == "" && tx.QueryRow(r.Context(), `SELECT id::text FROM shifts WHERE tenant_id=$1 AND user_id=$2 AND status='open'`, scope.TenantID, scope.UserID).Scan(&shiftID) != nil {
 			return errors.New("an open shift is required")
@@ -244,8 +323,12 @@ func (s *Server) createSale(w http.ResponseWriter, r *http.Request) {
 				return errors.New("item not found")
 			}
 			if kind == "stocked" {
-				if err := tx.QueryRow(r.Context(), `SELECT quantity_on_hand FROM branch_inventory WHERE tenant_id=$1 AND branch_id=$2 AND item_id=$3 FOR UPDATE`, scope.TenantID, branchID, itemID).Scan(&stock); err != nil { return errors.New("item is not stocked at this branch") }
-				if stock < raw.Quantity { return errors.New("insufficient stock") }
+				if err := tx.QueryRow(r.Context(), `SELECT quantity_on_hand FROM branch_inventory WHERE tenant_id=$1 AND branch_id=$2 AND item_id=$3 FOR UPDATE`, scope.TenantID, branchID, itemID).Scan(&stock); err != nil {
+					return errors.New("item is not stocked at this branch")
+				}
+				if stock < raw.Quantity {
+					return errors.New("insufficient stock")
+				}
 			}
 			lineTotal, calcErr := sales.Line{Quantity: raw.Quantity, UnitPriceMinor: price, DiscountMinor: raw.DiscountMinor}.TotalMinor()
 			if calcErr != nil {
@@ -277,7 +360,9 @@ func (s *Server) createSale(w http.ResponseWriter, r *http.Request) {
 			if _, err := tx.Exec(r.Context(), `INSERT INTO sale_lines(id,tenant_id,sale_id,item_id,quantity,unit_price_minor,discount_minor,line_total_minor) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, lineID, scope.TenantID, saleID, item.id, item.qty, item.price, item.discount, item.total); err != nil {
 				return err
 			}
-			if _, err := tx.Exec(r.Context(), `UPDATE catalog_items SET stock_on_hand=stock_on_hand-$1 WHERE tenant_id=$2 AND id=$3 AND kind='stocked'`, item.qty, scope.TenantID, item.id); err != nil { return err }
+			if _, err := tx.Exec(r.Context(), `UPDATE catalog_items SET stock_on_hand=stock_on_hand-$1 WHERE tenant_id=$2 AND id=$3 AND kind='stocked'`, item.qty, scope.TenantID, item.id); err != nil {
+				return err
+			}
 			if _, err := tx.Exec(r.Context(), `UPDATE branch_inventory SET quantity_on_hand=quantity_on_hand-$1,updated_at=now() WHERE tenant_id=$2 AND branch_id=$3 AND item_id=$4`, item.qty, scope.TenantID, branchID, item.id); err != nil {
 				return err
 			}
