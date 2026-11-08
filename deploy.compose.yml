@@ -7,7 +7,7 @@ services:
       POSTGRES_USER: pos
       POSTGRES_PASSWORD: pos-local-only
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "${POSTGRES_PORT:-5433}:5432"
     volumes:
       - pos-postgres:/var/lib/postgresql/data
       - ./deploy/postgres/init:/docker-entrypoint-initdb.d:ro

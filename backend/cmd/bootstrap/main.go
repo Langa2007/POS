@@ -72,7 +72,7 @@ func main() {
 			}
 		}
 		auditID, _ := ids.NewUUIDv7()
-		_, err = tx.Exec(ctx, `INSERT INTO audit_log(id,tenant_id,actor_id,action,entity_type,entity_id,after_data) VALUES($1,$2,$3,'tenant.bootstrap','tenant',$4,jsonb_build_object('business_id',$5,'branch_id',$6))`, auditID, tenantID, userID, tenantID, businessID, branchID)
+		_, err = tx.Exec(ctx, `INSERT INTO audit_log(id,tenant_id,actor_id,action,entity_type,entity_id,after_data) VALUES($1,$2,$3,'tenant.bootstrap','tenant',$4,jsonb_build_object('business_id',$5::uuid,'branch_id',$6::uuid))`, auditID, tenantID, userID, tenantID, businessID, branchID)
 		return err
 	})
 	if err != nil {
