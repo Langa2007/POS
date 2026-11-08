@@ -92,6 +92,8 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/v1/me/manifest", s.requireAuth(manifest))
 	mux.Handle("GET /api/v1/catalog/items", s.requireAuth(s.requirePermission("catalog.read", http.HandlerFunc(s.catalog))))
 	mux.Handle("POST /api/v1/catalog/items", s.requireAuth(s.requirePermission("catalog.manage", http.HandlerFunc(s.createItem))))
+	mux.Handle("PUT /api/v1/catalog/items/{itemID}", s.requireAuth(s.requirePermission("catalog.manage", http.HandlerFunc(s.updateItem))))
+	mux.Handle("DELETE /api/v1/catalog/items/{itemID}", s.requireAuth(s.requirePermission("catalog.manage", http.HandlerFunc(s.deleteItem))))
 	mux.Handle("POST /api/v1/shifts", s.requireAuth(s.requirePermission("sales.shift", http.HandlerFunc(s.openShift))))
 	mux.Handle("POST /api/v1/shifts/{shiftID}/close", s.requireAuth(s.requirePermission("sales.shift", http.HandlerFunc(s.closeShift))))
 	mux.Handle("POST /api/v1/sales", s.requireAuth(s.requirePermission("sales.create", http.HandlerFunc(s.createSale))))

@@ -13,6 +13,7 @@ import (
 	"github.com/Langa2007/POS/backend/internal/kernel/ids"
 	"github.com/Langa2007/POS/backend/internal/kernel/tenancy"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 type itemInput struct {
@@ -111,10 +112,68 @@ func (s *Server) createItem(w http.ResponseWriter, r *http.Request) {
 		return err
 	})
 	if err != nil {
-		writeError(w, 400, "catalog.create_failed", "Item could not be created")
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			writeError(w, http.StatusConflict, "catalog.duplicate", "An item with this SKU or barcode already exists")
+			return
+		}
+		s.logger.Error("create catalog item", "error", err)
+		writeError(w, 400, "catalog.create_failed", "Item could not be created. Check the product details and try again.")
 		return
 	}
 	writeJSON(w, 201, map[string]any{"id": itemID, "name": input.Name, "sku": input.SKU, "price_minor": input.PriceMinor, "stock_on_hand": input.StockOnHand})
+}
+
+func (s *Server) updateItem(w http.ResponseWriter, r *http.Request) {
+	scope, err := tenancy.Require(r.Context())
+	if err != nil { writeError(w, 401, "auth.required", "A valid bearer token is required"); return }
+	itemID := r.PathValue("itemID")
+	if !uuidPattern.MatchString(itemID) { writeError(w, 400, "catalog.invalid_item", "A valid item ID is required"); return }
+	var input itemInput
+	if json.NewDecoder(http.MaxBytesReader(w, r.Body, 16*1024)).Decode(&input) != nil || strings.TrimSpace(input.Name) == "" || strings.TrimSpace(input.SKU) == "" || input.PriceMinor < 0 || input.CostMinor < 0 || input.StockOnHand < 0 || input.ReorderLevel < 0 {
+		writeError(w, 400, "catalog.invalid_item", "Name, SKU, price, cost, stock, and reorder level must be valid")
+		return
+	}
+	if input.Kind == "" { input.Kind = "stocked" }
+	if input.Kind != "stocked" && input.Kind != "service" && input.Kind != "non_inventory" {
+		writeError(w, 400, "catalog.invalid_item", "Unsupported item kind"); return
+	}
+	err = s.db.TenantTx(r.Context(), scope.TenantID, func(tx pgx.Tx) error {
+		tag, execErr := tx.Exec(r.Context(), `UPDATE catalog_items SET name=$1,sku=$2,barcode=NULLIF($3,''),price_minor=$4,cost_minor=$5,stock_on_hand=$6,reorder_level=$7,kind=$8 WHERE tenant_id=$9 AND id=$10 AND active`, strings.TrimSpace(input.Name), strings.TrimSpace(input.SKU), strings.TrimSpace(input.Barcode), input.PriceMinor, input.CostMinor, input.StockOnHand, input.ReorderLevel, input.Kind, scope.TenantID, itemID)
+		if execErr != nil { return execErr }
+		if tag.RowsAffected() == 0 { return pgx.ErrNoRows }
+		branchID := scope.BranchID
+		if branchID == "" { _ = tx.QueryRow(r.Context(), `SELECT id::text FROM branches WHERE tenant_id=$1 ORDER BY created_at,id LIMIT 1`, scope.TenantID).Scan(&branchID) }
+		if input.Kind == "stocked" && branchID != "" {
+			_, execErr = tx.Exec(r.Context(), `INSERT INTO branch_inventory(tenant_id,branch_id,item_id,quantity_on_hand) VALUES($1,$2,$3,$4) ON CONFLICT(tenant_id,branch_id,item_id) DO UPDATE SET quantity_on_hand=excluded.quantity_on_hand,updated_at=now()`, scope.TenantID, branchID, itemID, input.StockOnHand)
+			if execErr != nil { return execErr }
+		}
+		return publishCatalogItemChange(r, tx, scope.TenantID, itemID)
+	})
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" { writeError(w, 409, "catalog.duplicate", "An item with this SKU or barcode already exists"); return }
+		if errors.Is(err, pgx.ErrNoRows) { writeError(w, 404, "catalog.not_found", "Product was not found"); return }
+		s.logger.Error("update catalog item", "error", err)
+		writeError(w, 400, "catalog.update_failed", "Product could not be updated"); return
+	}
+	writeJSON(w, 200, map[string]any{"id": itemID, "name": input.Name, "sku": input.SKU, "price_minor": input.PriceMinor, "stock_on_hand": input.StockOnHand, "reorder_level": input.ReorderLevel})
+}
+
+func (s *Server) deleteItem(w http.ResponseWriter, r *http.Request) {
+	scope, err := tenancy.Require(r.Context())
+	if err != nil { writeError(w, 401, "auth.required", "A valid bearer token is required"); return }
+	itemID := r.PathValue("itemID")
+	if !uuidPattern.MatchString(itemID) { writeError(w, 400, "catalog.invalid_item", "A valid item ID is required"); return }
+	err = s.db.TenantTx(r.Context(), scope.TenantID, func(tx pgx.Tx) error {
+		tag, execErr := tx.Exec(r.Context(), `UPDATE catalog_items SET active=false WHERE tenant_id=$1 AND id=$2 AND active`, scope.TenantID, itemID)
+		if execErr != nil { return execErr }
+		if tag.RowsAffected() == 0 { return pgx.ErrNoRows }
+		return nil
+	})
+	if errors.Is(err, pgx.ErrNoRows) { writeError(w, 404, "catalog.not_found", "Product was not found"); return }
+	if err != nil { s.logger.Error("delete catalog item", "error", err); writeError(w, 400, "catalog.delete_failed", "Product could not be deleted"); return }
+	w.WriteHeader(http.StatusNoContent)
 }
 
 type saleInput struct {

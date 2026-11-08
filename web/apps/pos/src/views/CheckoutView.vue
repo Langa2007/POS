@@ -36,6 +36,7 @@ const phone         = ref('')
 const pendingPayment= ref(null)
 let   saleKey       = ''
 let   paymentKey    = ''
+let scanTimer
 
 // ── Receipt & printer ───────────────────────────────────────────────────────
 const lastReceipt   = ref(null)
@@ -45,6 +46,12 @@ const printToken    = ref(sessionStorage.getItem('pos.printToken')  ?? '')
 // ── Reports ─────────────────────────────────────────────────────────────────
 const report = ref(null)
 const productDialog = ref(false)
+const manageDialog = ref(false)
+const sudoDialog = ref(false)
+const sudoEmail = ref('')
+const sudoPassword = ref('')
+const sudoToken = ref('')
+const editingItem = ref(null)
 const productBusy = ref(false)
 const productForm = ref({ name: '', sku: '', barcode: '', price_minor: '', cost_minor: '', stock_on_hand: '', reorder_level: '' })
 
@@ -55,6 +62,9 @@ const filteredItems = computed(() => {
   const q = search.value.toLowerCase()
   return q ? items.value.filter(i => `${i.name} ${i.sku} ${i.barcode ?? ''}`.toLowerCase().includes(q)) : items.value
 })
+function formatMoney(minor) {
+  return (Number(minor || 0) / 100).toFixed(2)
+}
 
 // ── Lifecycle ────────────────────────────────────────────────────────────────
 onMounted(async () => {
@@ -104,6 +114,40 @@ function openProductDialog() {
   productForm.value = { name: '', sku: '', barcode: '', price_minor: '', cost_minor: '', stock_on_hand: '', reorder_level: '' }
   productDialog.value = true
 }
+function openManageDialog() { sudoEmail.value = ''; sudoPassword.value = ''; sudoDialog.value = true }
+async function unlockCatalog() {
+  try {
+    const response = await fetch('/api/v1/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tenant_id: session.tenantId, email: sudoEmail.value, password: sudoPassword.value }) })
+    const data = await response.json()
+    if (!response.ok) throw new Error(data.error?.message ?? 'Owner verification failed')
+    sudoToken.value = data.access_token
+    sudoDialog.value = false
+    manageDialog.value = true
+  } catch (err) { toast.error(err.message) }
+}
+function editItem(item) {
+  editingItem.value = { ...item, price_minor: (item.price_minor / 100).toFixed(2), cost_minor: (item.cost_minor / 100).toFixed(2) }
+}
+async function saveItem() {
+  try {
+    const form = editingItem.value
+    const data = await api.put(`/api/v1/catalog/items/${form.id}`, { name: form.name.trim(), sku: form.sku.trim(), barcode: form.barcode?.trim() ?? '', price_minor: Math.round(Number(form.price_minor) * 100), cost_minor: Math.round(Number(form.cost_minor || 0) * 100), stock_on_hand: Number(form.stock_on_hand), reorder_level: Number(form.reorder_level), kind: form.kind }, { headers: { Authorization: `Bearer ${sudoToken.value}` } })
+    const index = items.value.findIndex(item => item.id === form.id)
+    if (index >= 0) items.value[index] = { ...items.value[index], ...data, barcode: form.barcode, cost_minor: Math.round(Number(form.cost_minor || 0) * 100) }
+    await cacheCatalog(items.value)
+    editingItem.value = null
+    toast.success('Product updated.')
+  } catch (err) { toast.error(err.message) }
+}
+async function deleteItem(item) {
+  if (!window.confirm(`Delete ${item.name} from the catalog? Existing sales are preserved.`)) return
+  try {
+    await api.delete(`/api/v1/catalog/items/${item.id}`, { headers: { Authorization: `Bearer ${sudoToken.value}` } })
+    items.value = items.value.filter(entry => entry.id !== item.id)
+    await cacheCatalog(items.value)
+    toast.success('Product removed from the catalog.')
+  } catch (err) { toast.error(err.message) }
+}
 
 async function createProduct() {
   productBusy.value = true
@@ -141,6 +185,13 @@ function scanBarcode() {
   if (!item) { toast.error(t('catalog.noMatch', { value: val })); return }
   addToCart(item)
   search.value = ''
+}
+function handleSearchInput() {
+  clearTimeout(scanTimer)
+  const value = search.value.trim()
+  if (!value) return
+  const item = items.value.find(entry => entry.barcode === value)
+  if (item) scanTimer = setTimeout(() => scanBarcode(), 120)
 }
 
 // ── Shift ────────────────────────────────────────────────────────────────────
@@ -338,9 +389,11 @@ function browserPrint() { window.print() }
               class="search-input"
               :aria-label="t('catalog.scanSearch')"
               :placeholder="t('catalog.scanSearch')"
+              @input="handleSearchInput"
               @keydown.enter.prevent="scanBarcode"
             />
             <PosButton variant="secondary" @click="openProductDialog">+ Product</PosButton>
+            <PosButton variant="secondary" @click="openManageDialog">Manage</PosButton>
           </div>
         </div>
         <div class="product-grid" role="list">
@@ -352,7 +405,7 @@ function browserPrint() { window.print() }
           >
             <strong>{{ item.name }}</strong>
             <span>{{ item.sku }}<template v-if="item.barcode"> · {{ item.barcode }}</template></span>
-            <b>{{ item.price_minor }} {{ manifest.currency }}</b>
+            <b>{{ formatMoney(item.price_minor) }} {{ manifest.currency }}</b>
             <small>{{ t('catalog.inStock', { count: item.stock_on_hand }) }}</small>
             <small v-if="item.low_stock" class="low-stock">Low stock · reorder soon</small>
           </button>
@@ -374,19 +427,19 @@ function browserPrint() { window.print() }
         <div v-for="line in cart" :key="line.id" class="cart-line">
           <div>
             <strong>{{ line.name }}</strong>
-            <small>{{ line.price_minor }} {{ manifest.currency }} each</small>
+            <small>{{ formatMoney(line.price_minor) }} {{ manifest.currency }} each</small>
           </div>
           <div class="quantity">
             <button @click="removeFromCart(line)" :aria-label="`Decrease ${line.name} quantity`">−</button>
             <b>{{ line.quantity }}</b>
             <button :disabled="line.kind === 'stocked' && line.quantity >= line.stock_on_hand" @click="addToCart(line)" :aria-label="`Increase ${line.name} quantity`">+</button>
           </div>
-          <strong class="line-total">{{ line.price_minor * line.quantity }} {{ manifest.currency }}</strong>
+          <strong class="line-total">{{ formatMoney(line.price_minor * line.quantity) }} {{ manifest.currency }}</strong>
         </div>
 
         <div class="cart-total">
           <span>{{ t('checkout.total') }}</span>
-          <strong>{{ total }} {{ manifest.currency }}</strong>
+          <strong>{{ formatMoney(total) }} {{ manifest.currency }}</strong>
         </div>
 
         <PosSelect
@@ -404,7 +457,7 @@ function browserPrint() { window.print() }
             :placeholder="String(total)"
             style="margin-top:12px"
           />
-          <p class="change-line">{{ t('checkout.change') }} <strong>{{ change }} {{ manifest.currency }}</strong></p>
+          <p class="change-line">{{ t('checkout.change') }} <strong>{{ formatMoney(change) }} {{ manifest.currency }}</strong></p>
         </template>
         <PosInput
           v-else
@@ -444,13 +497,13 @@ function browserPrint() { window.print() }
       <div class="receipt-lines">
         <div v-for="(line, i) in lastReceipt.lines" :key="`${line.name}-${i}`">
           <span>{{ line.quantity }} × {{ line.name }}</span>
-          <span>{{ line.quantity * line.unit_price_minor }} {{ manifest.currency }}</span>
+          <span>{{ formatMoney(line.quantity * line.unit_price_minor) }} {{ manifest.currency }}</span>
         </div>
       </div>
       <div class="receipt-totals">
-        <span class="rt-row"><span>Total</span><span>{{ lastReceipt.total_minor }} {{ manifest.currency }}</span></span>
-        <span class="rt-row"><span>Received</span><span>{{ lastReceipt.received_minor }} {{ manifest.currency }}</span></span>
-        <strong class="rt-row"><span>Change</span><span>{{ lastReceipt.change_minor }} {{ manifest.currency }}</span></strong>
+        <span class="rt-row"><span>Total</span><span>{{ formatMoney(lastReceipt.total_minor) }} {{ manifest.currency }}</span></span>
+        <span class="rt-row"><span>Received</span><span>{{ formatMoney(lastReceipt.received_minor) }} {{ manifest.currency }}</span></span>
+        <strong class="rt-row"><span>Change</span><span>{{ formatMoney(lastReceipt.change_minor) }} {{ manifest.currency }}</span></strong>
       </div>
     </section>
 
@@ -470,6 +523,29 @@ function browserPrint() { window.print() }
           <PosButton type="button" variant="secondary" @click="productDialog = false">Cancel</PosButton>
           <PosButton type="submit" :disabled="productBusy">{{ productBusy ? 'Saving…' : 'Save product' }}</PosButton>
         </div>
+      </form>
+    </PosDialog>
+    <PosDialog :open="sudoDialog" title="Owner verification" size="sm" @close="sudoDialog = false">
+      <form class="product-form" @submit.prevent="unlockCatalog">
+        <p class="form-helper">Catalog changes require owner/admin verification.</p>
+        <PosInput v-model="sudoEmail" label="Owner email" type="email" required />
+        <PosInput v-model="sudoPassword" label="Owner password" type="password" required />
+        <div class="dialog-actions"><PosButton type="submit">Unlock catalog</PosButton></div>
+      </form>
+    </PosDialog>
+    <PosDialog :open="manageDialog" title="Manage catalog" size="lg" @close="manageDialog = false">
+      <div v-if="!editingItem" class="manage-list">
+        <p class="form-helper">These actions are separate from the customer checkout cart.</p>
+        <article v-for="item in items" :key="item.id" class="manage-row">
+          <div><strong>{{ item.name }}</strong><small>{{ item.sku }} · {{ formatMoney(item.price_minor) }} {{ manifest.currency }} · {{ item.stock_on_hand }} in stock</small></div>
+          <div class="manage-actions"><PosButton variant="secondary" @click="editItem(item)">Edit</PosButton><PosButton variant="secondary" @click="deleteItem(item)">Delete</PosButton></div>
+        </article>
+      </div>
+      <form v-else class="product-form" @submit.prevent="saveItem">
+        <p class="form-helper">Changes affect future sales. Existing receipts remain unchanged.</p>
+        <PosInput v-model="editingItem.name" label="Product name" required />
+        <div class="form-grid"><PosInput v-model="editingItem.sku" label="SKU" required /><PosInput v-model="editingItem.barcode" label="Barcode" /><PosInput v-model="editingItem.price_minor" label="Selling price (KES)" type="number" step="0.01" required /><PosInput v-model="editingItem.cost_minor" label="Your cost (KES)" type="number" step="0.01" /><PosInput v-model="editingItem.stock_on_hand" label="Stock (items)" type="number" min="0" /><PosInput v-model="editingItem.reorder_level" label="Reorder level (items)" type="number" min="0" /></div>
+        <div class="dialog-actions"><PosButton type="button" variant="secondary" @click="editingItem = null">Cancel</PosButton><PosButton type="submit">Save changes</PosButton></div>
       </form>
     </PosDialog>
   </div>
@@ -523,6 +599,11 @@ function browserPrint() { window.print() }
 .form-helper { margin:0; color:#697586; font-size:12px; line-height:1.5; }
 .form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
 .dialog-actions { display:flex; justify-content:flex-end; gap:10px; padding-top:4px; }
+.manage-list { display:grid; gap:8px; }
+.manage-row { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid #edf0f4; }
+.manage-row > div:first-child { display:grid; gap:4px; }
+.manage-row small { color:#697586; font-size:11px; }
+.manage-actions { display:flex; gap:8px; }
 /* Responsive */
 @media (max-width: 900px) { .commerce-grid { grid-template-columns:1fr; } .cart-panel { order:-1; } }
 @media (max-width: 600px) { .summary-grid { grid-template-columns:1fr; } .catalog-actions { align-items:stretch; flex-direction:column; } .form-grid { grid-template-columns:1fr; } .line-total { display:none; } }
