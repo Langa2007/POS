@@ -408,18 +408,16 @@ function browserPrint() { window.print() }
           </div>
         </div>
         <div class="product-grid" role="list">
-          <button
+          <article
             v-for="item in filteredItems" :key="item.id"
             class="product-card" role="listitem"
-            :disabled="item.kind === 'stocked' && item.stock_on_hand < 1"
-            @click="addToCart(item)"
           >
             <strong>{{ item.name }}</strong>
             <span>{{ item.sku }}<template v-if="item.barcode"> · {{ item.barcode }}</template></span>
             <b>{{ formatMoney(item.price_minor) }} {{ manifest.currency }}</b>
             <small>{{ t('catalog.inStock', { count: item.stock_on_hand }) }}</small>
             <small v-if="item.low_stock" class="low-stock">Low stock · reorder soon</small>
-          </button>
+          </article>
         </div>
         <p v-if="!filteredItems.length" class="catalog-empty">No products match this search. Scan a barcode or add the product.</p>
       </section>
@@ -578,9 +576,8 @@ function browserPrint() { window.print() }
 .search-input { height:42px; border:1px solid #dfe5e9; border-radius:8px; padding:0 11px; font:inherit; font-size:12px; outline:none; }
 .search-input:focus { border-color:#31a88a; }
 .product-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:10px; }
-.product-card { min-height:120px; text-align:left; background:#fbfcfd; border:1px solid #e4e9ec; border-radius:10px; padding:13px; display:grid; gap:5px; cursor:pointer; color:var(--color-ink); }
-.product-card:hover:not(:disabled) { border-color:#35aa8d; background:#f3fbf7; }
-.product-card:disabled { opacity:.5; cursor:not-allowed; }
+.product-card { min-height:120px; text-align:left; background:#fbfcfd; border:1px solid #e4e9ec; border-radius:10px; padding:13px; display:grid; gap:5px; color:var(--color-ink); }
+.product-card:hover { border-color:#cfd9d6; }
 .product-card span,.product-card small { font-size:10px; color:#8a969d; }
 .product-card b { font-size:13px; color:#13765f; }
 .product-card span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
