@@ -12,11 +12,7 @@
     <div class="sidebar-block">
       <label class="block-label">Assigned Table / Order Type:</label>
       <select v-model="selectedTableNumber" class="table-select" @change="onTableChange">
-        <option value="1">Table 1 &mdash; Main (Mary W.)</option>
-        <option value="2">Table 2 &mdash; Main (Kevin O.)</option>
-        <option value="5">Table 5 &mdash; Terrace (Mary W.)</option>
-        <option value="VIP 1">VIP 1 &mdash; Suite (Alice N.)</option>
-        <option value="Bar 1">Bar 1 &mdash; Lounge (Brian M.)</option>
+        <option v-for="table in tables" :key="table.id" :value="table.number">Table {{ table.number }} &mdash; {{ table.section_name }}</option>
         <option value="Takeaway">Takeaway / Counter Delivery</option>
       </select>
     </div>
@@ -93,8 +89,9 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { PosIcon } from '@pos/ui'
+import { useApi } from '../../../../apps/pos/src/composables/useApi.js'
 
 const props = defineProps({
   cart: {
@@ -104,9 +101,20 @@ const props = defineProps({
 })
 
 const selectedTableNumber = ref('1')
+const tables = ref([])
 const firedCourse = ref('Mains')
 const applyServiceCharge = ref(true)
 const activeTip = ref(10)
+const api = useApi()
+onMounted(async () => {
+  try {
+    const data = await api.get('/api/v1/restaurant/tables')
+    tables.value = data.tables ?? []
+    selectedTableNumber.value = tables.value[0]?.number ?? 'Takeaway'
+  } catch {
+    window.dispatchEvent(new CustomEvent('pos:notification', { detail: { message: 'Table options could not be loaded. Please contact your administrator.', type: 'error' } }))
+  }
+})
 
 function onTableChange() {
   window.dispatchEvent(new CustomEvent('pos:notification', {

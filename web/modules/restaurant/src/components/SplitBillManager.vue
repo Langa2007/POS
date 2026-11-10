@@ -169,8 +169,9 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { onMounted, ref, computed } from 'vue'
 import { PosIcon } from '@pos/ui'
+import { useApi } from '../../../../apps/pos/src/composables/useApi.js'
 
 const emit = defineEmits(['notification'])
 
@@ -179,12 +180,17 @@ const evenWays = ref(4)
 const includeServiceCharge = ref(true)
 const tipPercent = ref(10)
 
-const billItems = ref([
-  { name: 'Prime T-Bone Steak 400g', priceMinor: 240000, quantity: 2 },
-  { name: 'Kunde & Creamed Spinach', priceMinor: 35000, quantity: 2 },
-  { name: 'Passion Fruit Mojito', priceMinor: 65000, quantity: 3 },
-  { name: 'Warm Chocolate Fondant', priceMinor: 45000, quantity: 2 },
-])
+const billItems = ref([])
+const api = useApi()
+onMounted(async () => {
+  try {
+    const data = await api.get('/api/v1/restaurant/tables')
+    const table = (data.tables ?? []).find(item => item.status !== 'available')
+    billItems.value = table?.items ?? []
+  } catch {
+    emit('notification', { message: 'Bill details could not be loaded. Please contact your administrator.', type: 'error' })
+  }
+})
 
 const itemSeatAssignments = ref({
   0: '1',

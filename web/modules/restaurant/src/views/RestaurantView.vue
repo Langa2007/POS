@@ -13,23 +13,23 @@
       <div class="quick-kpis">
         <div class="kpi-card">
           <span class="kpi-lbl">Table Occupancy</span>
-          <strong class="kpi-val highlight">67%</strong>
-          <small class="kpi-sub">6 of 9 tables seated</small>
+          <strong class="kpi-val highlight">{{ summary.tables }}</strong>
+          <small class="kpi-sub">Tables in service</small>
         </div>
         <div class="kpi-card">
           <span class="kpi-lbl">Active Covers</span>
-          <strong class="kpi-val">18 Guests</strong>
-          <small class="kpi-sub">Across 4 zones</small>
+          <strong class="kpi-val">{{ summary.covers }} Guests</strong>
+          <small class="kpi-sub">Active covers</small>
         </div>
         <div class="kpi-card">
           <span class="kpi-lbl">Kitchen Queue</span>
-          <strong class="kpi-val warning">4 KOTs</strong>
-          <small class="kpi-sub">Avg prep: 11 mins</small>
+          <strong class="kpi-val warning">{{ summary.kitchen_tickets }} KOTs</strong>
+          <small class="kpi-sub">Awaiting preparation</small>
         </div>
         <div class="kpi-card">
           <span class="kpi-lbl">Today's Dining Revenue</span>
-          <strong class="kpi-val success">KES 148,500</strong>
-          <small class="kpi-sub">34 settled tabs</small>
+          <strong class="kpi-val success">KES {{ (Number(summary.total_minor) / 100).toLocaleString() }}</strong>
+          <small class="kpi-sub">{{ summary.sales_count }} settled sales</small>
         </div>
       </div>
     </header>
@@ -83,8 +83,9 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { PosIcon } from '@pos/ui'
+import { useApi } from '../../../../apps/pos/src/composables/useApi.js'
 import TableServiceManager from '../components/TableServiceManager.vue'
 import KitchenDisplayManager from '../components/KitchenDisplayManager.vue'
 import MenuModifiersManager from '../components/MenuModifiersManager.vue'
@@ -93,12 +94,21 @@ import SplitBillManager from '../components/SplitBillManager.vue'
 const activeTab = ref('tables')
 const notification = ref(null)
 
+const api = useApi()
+const summary = ref({ tables: 0, covers: 0, kitchen_tickets: 0, total_minor: 0, sales_count: 0 })
 const tabs = [
-  { id: 'tables', label: 'Floor Plan & Tables', icon: 'layout-grid', badge: '6 Active', badgeClass: 'badge-blue' },
-  { id: 'kitchen', label: 'Kitchen Display (KDS)', icon: 'flame', badge: '4 Pending', badgeClass: 'badge-red' },
+  { id: 'tables', label: 'Floor Plan & Tables', icon: 'layout-grid' },
+  { id: 'kitchen', label: 'Kitchen Display (KDS)', icon: 'flame' },
   { id: 'modifiers', label: 'Dish Modifiers & Combos', icon: 'chef-hat' },
   { id: 'split', label: 'Split Bills & Gratuity', icon: 'split' },
 ]
+onMounted(async () => {
+  try {
+    summary.value = await api.get('/api/v1/restaurant/summary')
+  } catch {
+    notification.value = { message: 'Restaurant summary is unavailable. Please contact your administrator.', type: 'error' }
+  }
+})
 
 function showNotification({ message, type = 'info' }) {
   notification.value = { message, type }
