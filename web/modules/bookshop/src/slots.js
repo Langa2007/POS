@@ -1,1 +1,1 @@
-export default { 'catalog.details': () => import('./components/BookDetailsSlot.vue') }
+export default { 'checkout.sidebar': () => import('./components/BookshopCheckoutSidebar.vue') }

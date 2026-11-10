@@ -6,6 +6,8 @@ const moduleLoaders = {
   pharmacy: () => import('../../../modules/pharmacy/src/index.js'),
   hardware: () => import('../../../modules/hardware/src/index.js'),
   restaurant: () => import('../../../modules/restaurant/src/index.js'),
+  bookshop: () => import('../../../modules/bookshop/src/index.js'),
+  salon: () => import('../../../modules/salon/src/index.js'),
 }
 
 const slotRegistry = ref({}) // { [slotName]: [{ moduleId, component }] }

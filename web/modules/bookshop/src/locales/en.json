@@ -1,0 +1,9 @@
+{
+  "bookshop": "Bookshop",
+  "isbnCatalog": "ISBN Catalog",
+  "consignment": "Consignment",
+  "publisherReturns": "Publisher Returns",
+  "specialOrders": "Special Orders",
+  "secondHand": "Second-hand Books",
+  "schoolOrders": "School Orders"
+}

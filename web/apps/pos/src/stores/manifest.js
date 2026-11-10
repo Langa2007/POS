@@ -45,6 +45,24 @@ export const AVAILABLE_SHOPS = [
     capabilities: ['table_service', 'kitchen_display', 'menu_modifiers', 'split_bills', 'recipes'],
     route: '/restaurant',
   },
+  {
+    id: 'bookshop',
+    name: 'Bookshop',
+    badge: ' Bookshop Counter',
+    subtitle: 'ISBN catalog, special orders, consignments, and publisher returns',
+    icon: '',
+    capabilities: ['isbn_catalog', 'consignment', 'publisher_returns', 'special_orders', 'second_hand', 'school_orders'],
+    route: '/bookshop',
+  },
+  {
+    id: 'salon',
+    name: 'Salon & Spa',
+    badge: ' Salon Front Desk',
+    subtitle: 'Appointments, service packages, stylist commissions, and loyalty',
+    icon: '',
+    capabilities: ['appointments', 'commissions', 'packages', 'loyalty'],
+    route: '/salon',
+  },
 ]
 
 export const useManifestStore = defineStore('manifest', () => {
@@ -81,6 +99,8 @@ export const useManifestStore = defineStore('manifest', () => {
     'pharmacy.read', 'pharmacy.dispense', 'pharmacy.manage',
     'hardware.read', 'hardware.manage', 'hardware.credit',
     'restaurant.read', 'restaurant.order', 'restaurant.manage',
+    'bookshop.read', 'bookshop.manage', 'bookshop.returns',
+    'salon.read', 'salon.manage',
   ])
   const currency      = computed(() => manifest.value?.branch?.currency ?? 'KES')
 

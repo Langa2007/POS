@@ -585,6 +585,22 @@ function browserPrint() { window.print() }
             >
               🍽️ Restaurant Till
             </button>
+            <button
+              type="button"
+              class="ext-btn"
+              :class="{ 'active': manifest.activeShop === 'bookshop' }"
+              @click="manifest.setActiveShop('bookshop')"
+            >
+              📚 Bookshop Counter
+            </button>
+            <button
+              type="button"
+              class="ext-btn"
+              :class="{ 'active': manifest.activeShop === 'salon' }"
+              @click="manifest.setActiveShop('salon')"
+            >
+              ✨ Salon Front Desk
+            </button>
           </div>
         </div>
 

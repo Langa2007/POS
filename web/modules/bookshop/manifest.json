@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "capabilities": ["isbn_catalog", "consignment", "publisher_returns", "special_orders", "second_hand", "school_orders"],
   "routes": [{"path": "/bookshop", "component": "BookshopView"}],
-  "slots": [{"name": "catalog.details", "component": "BookDetailsSlot"}],
+  "slots": [{"name": "checkout.sidebar", "component": "BookshopCheckoutSidebar"}],
   "nav": [{"label": "Bookshop", "path": "/bookshop", "icon": "book"}],
   "permissions": ["bookshop.read", "bookshop.manage", "bookshop.returns"]
 }

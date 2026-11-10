@@ -20,6 +20,10 @@ The frontend currently has four business modules wired into the running POS:
   materials, trade credit, and delivery
 - **Restaurant and bar** — table service, kitchen orders, menu modifiers, and
   split bills
+- **Bookshop** — ISBN catalog, special and school orders, consignments, and
+  publisher returns
+- **Salon and spa** — appointments, service packages, stylist commissions, and
+  client loyalty
 
 Additional verticals are declared in `web/modules/` and are at different stages
 of implementation:
@@ -35,8 +39,8 @@ of implementation:
 - Salon and spa
 
 The module manifests describe the intended capabilities, routes, permissions,
-and UI slots. The active frontend loader enables Retail, Pharmacy, Hardware,
-and Restaurant. The other modules should be treated as work in progress until
+and UI slots. The active frontend loader enables Retail, Pharmacy, Hardware, Restaurant,
+Bookshop, and Salon. The other modules should be treated as work in progress until
 they are added to the loader and their views are complete.
 
 ## Architecture

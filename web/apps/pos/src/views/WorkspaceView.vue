@@ -101,6 +101,20 @@ function switchShop(shopId) {
         >
           🍽️ Restaurant
         </RouterLink>
+        <RouterLink
+          to="/bookshop"
+          class="nav-link"
+          :class="{ 'highlight': manifest.activeShop === 'bookshop' }"
+        >
+          📚 Bookshop
+        </RouterLink>
+        <RouterLink
+          to="/salon"
+          class="nav-link"
+          :class="{ 'highlight': manifest.activeShop === 'salon' }"
+        >
+          ✨ Salon
+        </RouterLink>
         <RouterLink :to="{ name: 'backoffice' }" class="nav-link">
           📊 {{ t('nav.reports') }}
         </RouterLink>
