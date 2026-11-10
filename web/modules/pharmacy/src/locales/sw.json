@@ -1,0 +1,18 @@
+{
+  "pharmacy": "Duka la Dawa",
+  "batchTracking": "Ufuatiliaji wa Batchi",
+  "expiryTracking": "Ufuatiliaji wa Tarehe ya Uharibifu",
+  "prescriptions": "Maagizo ya Dawa",
+  "controlledSubstances": "Vifaa Vilivyokuwa na Kudhibitiwa",
+  "multiUom": "Vipimo Vya Kawaida",
+  "batchTrackingDesc": "Fuatilia batchi za dawa kwa ufuatiliaji",
+  "expiryTrackingDesc": "Kabiliana na tarehe za uharibifu na pokea onyo",
+  "prescriptionsDesc": "Shughulikia na thibitisha maagizo ya dawa",
+  "controlledSubstancesDesc": "Simamia utoaji wa dawa zinazodhibitiwa",
+  "multiUomDesc": "Shughulikia vipimo vingi vya kawaida kwa kila kitu",
+  "checkoutSidebar": "Chaguo za Malipo ya Duka la Dawa",
+  "dispensePrescription": "Toa Maagizo ya Dawa",
+  "checkBatch": "Angalia Batchi",
+  "verifyExpiry": "Thibitisha Uharibifu",
+  "controlledSubstance": "Kitu Kilichodhibitiwa"
+}

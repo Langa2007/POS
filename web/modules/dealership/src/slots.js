@@ -1,0 +1,1 @@
+export default { 'catalog.details': () => import('./components/WarrantySlot.vue') }

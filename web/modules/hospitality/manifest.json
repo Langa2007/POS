@@ -1,0 +1,10 @@
+{
+  "id": "hospitality",
+  "name": "Hospitality",
+  "version": "0.1.0",
+  "capabilities": ["room_booking", "rate_plans", "guest_folio", "housekeeping", "night_audit", "group_billing", "deposits"],
+  "routes": [{"path": "/hospitality", "component": "HospitalityView"}],
+  "slots": [{"name": "sale.lines", "component": "FolioChargeSlot"}],
+  "nav": [{"label": "Reservations", "path": "/hospitality", "icon": "bed"}],
+  "permissions": ["hospitality.read", "hospitality.manage", "hospitality.audit"]
+}

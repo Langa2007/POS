@@ -1,0 +1,20 @@
+{
+  "hardware": "Vifaa vya Ujenzi",
+  "multiUom": "Vipimo Vya Kawaida",
+  "cutToLength": "Kata kwa Urefu",
+  "creditAccounts": "Akaunti za Mkopo",
+  "contractPricing": "Bei ya Mkataba",
+  "quotes": "Bei Za Mapendekezo",
+  "delivery": "Utoaji",
+  "multiUomDesc": "Uza kwa urefu, uzito, eneo, au ujazo",
+  "cutToLengthDesc": "Kata vifaa kulingana na mahitaji ya mteja",
+  "creditAccountsDesc": "Simamia akaunti za mkopo za biashara",
+  "contractPricingDesc": "Tekeleza bei za mkataba kwa wateja wa B2B",
+  "quotesDesc": "Unda na uliza bei za mapendekezo ya mradi",
+  "deliveryDesc": "Ratibia na fuatilia utoaji",
+  "checkoutSidebar": "Chaguo za Malipo ya Vifaa vya Ujenzi",
+  "cutMaterial": "Kata Vifaa",
+  "applyContract": "Tekeleza Bei ya Mkataba",
+  "createQuote": "Unda Bei ya Mapendekezo",
+  "scheduleDelivery": "Ratibia Utoaji"
+}

@@ -1,0 +1,1 @@
+export default [ { label: 'Hardware', path: '/hardware', icon: 'building', permission: 'hardware.read' } ]

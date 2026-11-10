@@ -1,0 +1,1 @@
+export default [{ path: '/dealership', name: 'dealership', component: () => import('./views/DealershipView.vue'), meta: { requiresAuth: true, permission: 'dealership.read' } }]

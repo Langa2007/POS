@@ -1,0 +1,1 @@
+export default [{ path: '/fuelstation', name: 'fuelstation', component: () => import('./views/FuelStationView.vue'), meta: { requiresAuth: true, permission: 'fuelstation.read' } }]

@@ -1,0 +1,10 @@
+{
+  "id": "retail",
+  "name": "Retail",
+  "version": "0.1.0",
+  "capabilities": ["weighed_items", "promotions", "loyalty", "perishables"],
+  "routes": [{"path": "/retail", "component": "RetailView"}],
+  "slots": [{"name": "checkout.sidebar", "component": "RetailCheckoutSidebar"}],
+  "nav": [{"label": "Retail", "path": "/retail", "icon": "store"}],
+  "permissions": ["retail.read", "retail.manage"]
+}

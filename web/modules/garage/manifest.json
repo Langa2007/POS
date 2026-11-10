@@ -1,0 +1,10 @@
+{
+  "id": "garage",
+  "name": "Garage",
+  "version": "0.1.0",
+  "capabilities": ["job_cards", "parts_and_labor", "service_reminders", "appointments"],
+  "routes": [{"path": "/garage", "component": "GarageView"}],
+  "slots": [{"name": "sale.lines", "component": "JobCardSlot"}],
+  "nav": [{"label": "Job Cards", "path": "/garage", "icon": "wrench"}],
+  "permissions": ["garage.read", "garage.manage"]
+}

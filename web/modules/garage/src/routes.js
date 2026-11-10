@@ -1,0 +1,1 @@
+export default [{ path: '/garage', name: 'garage', component: () => import('./views/GarageView.vue'), meta: { requiresAuth: true, permission: 'garage.read' } }]

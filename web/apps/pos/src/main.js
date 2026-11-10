@@ -6,9 +6,27 @@ import './style.css'
 import router from './router/index.js'
 import en from './locales/en.json'
 import sw from './locales/sw.json'
+import { loadEnabledModules } from './moduleLoader.js'
 
-const i18n = createI18n({ legacy: false, locale: 'en', fallbackLocale: 'en', messages: { en, sw } })
-createApp({ render: () => h(RouterView) }).use(createPinia()).use(router).use(i18n).mount('#app')
+const i18n = createI18n({
+  legacy: false,
+  locale: 'en',
+  fallbackLocale: 'en',
+  messages: { en, sw },
+})
+
+const pinia = createPinia()
+const app = createApp({ render: () => h(RouterView) })
+  .use(pinia)
+  .use(router)
+  .use(i18n)
+
+loadEnabledModules(router, i18n)
+  .catch((err) => console.warn('Module loading warning:', err))
+  .finally(() => {
+    app.mount('#app')
+  })
+
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => undefined))
 }

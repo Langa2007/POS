@@ -1,0 +1,22 @@
+{
+  "hospitality": "Hospitality",
+  "roomBooking": "Room Booking",
+  "ratePlans": "Rate Plans",
+  "guestFolio": "Guest Folio",
+  "housekeeping": "Housekeeping",
+  "nightAudit": "Night Audit",
+  "groupBilling": "Group Billing",
+  "deposits": "Deposits",
+  "roomBookingDesc": "Manage room reservations and availability",
+  "ratePlansDesc": "Configure seasonal and promotional rates",
+  "guestFolioDesc": "Track guest charges and payments",
+  "housekeepingDesc": "Monitor room status and cleaning schedules",
+  "nightAuditDesc": "End-of-day reconciliation and reporting",
+  "groupBillingDesc": "Bill multiple rooms to a single account",
+  "depositsDesc": "Manage deposit collection and refunds",
+  "folioCharge": "Folio Charge",
+  "addCharge": "Add Charge",
+  "viewFolio": "View Folio",
+  "checkIn": "Check In",
+  "checkOut": "Check Out"
+}

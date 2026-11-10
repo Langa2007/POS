@@ -3,7 +3,7 @@
  * CheckoutView — cashier mode: catalog grid + cart + tender + receipt.
  * Extracted from the App.vue monolith and wired to stores.
  */
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { PosButton, PosInput, PosSelect, PosDialog } from '../../../../packages/ui/src/index.js'
 import { useSessionStore } from '../stores/session.js'
@@ -15,6 +15,7 @@ import {
   cacheCatalog, enqueueSale, getCatalog, getMetadata, nextReceiptNumber, setMetadata,
 } from '../../../../packages/offline/src/index.js'
 import SyncPanel from '../components/SyncPanel.vue'
+import ModuleSlot from '../components/ModuleSlot.vue'
 
 const { t } = useI18n()
 const session     = useSessionStore()
@@ -55,8 +56,16 @@ const editingItem = ref(null)
 const productBusy = ref(false)
 const productForm = ref({ name: '', sku: '', barcode: '', price_minor: '', cost_minor: '', stock_on_hand: '', reorder_level: '' })
 
-// ── Computed ─────────────────────────────────────────────────────────────────
-const total  = computed(() => cart.value.reduce((s, l) => s + l.price_minor * l.quantity, 0))
+// ── Computed & Discounts ───────────────────────────────────────────────────
+const activeDiscount = ref(null)
+const subtotal = computed(() => cart.value.reduce((s, l) => s + l.price_minor * l.quantity, 0))
+const discountMinor = computed(() => {
+  if (!activeDiscount.value) return 0
+  if (activeDiscount.value.amountMinor) return Math.min(subtotal.value, activeDiscount.value.amountMinor)
+  if (activeDiscount.value.percent) return Math.round((subtotal.value * activeDiscount.value.percent) / 100)
+  return 0
+})
+const total  = computed(() => Math.max(0, subtotal.value - discountMinor.value))
 const change = computed(() => Math.max(0, Number(received.value || 0) - total.value))
 const filteredItems = computed(() => {
   const q = search.value.toLowerCase()
@@ -66,13 +75,47 @@ function formatMoney(minor) {
   return (Number(minor || 0) / 100).toFixed(2)
 }
 
+function handleCustomAddItem(e) {
+  if (e.detail) {
+    addToCart(e.detail)
+    toast.success(`Added ${e.detail.name} to cart`)
+  }
+}
+function handleCustomAddItemBatch(e) {
+  if (Array.isArray(e.detail)) {
+    e.detail.forEach((item) => addToCart(item))
+    toast.success(`Added ${e.detail.length} items to cart`)
+  }
+}
+function handleCustomDiscount(e) {
+  if (e.detail) {
+    activeDiscount.value = e.detail
+    toast.info(`Discount applied: ${e.detail.description}`)
+  }
+}
+
 // ── Lifecycle ────────────────────────────────────────────────────────────────
 onMounted(async () => {
+  window.addEventListener('pos:add-item', handleCustomAddItem)
+  window.addEventListener('pos:add-item-batch', handleCustomAddItemBatch)
+  window.addEventListener('pos:apply-discount', handleCustomDiscount)
+
   // Load catalog from cache first
   const cached = await getCatalog()
   if (cached.length) items.value = cached
   const cachedCart = await getMetadata('current_cart', [])
   if (cachedCart.length) cart.value = cachedCart
+
+  // Check pending additions from retail/pharmacy
+  try {
+    const pending = JSON.parse(localStorage.getItem('pos.retailCartPending') || '[]')
+    if (pending.length) {
+      pending.forEach((p) => addToCart(p))
+      localStorage.removeItem('pos.retailCartPending')
+    }
+  } catch (err) {
+    console.error(err)
+  }
 
   if (connectivity.online) {
     try {
@@ -87,6 +130,12 @@ onMounted(async () => {
       if (reportRes.status === 'fulfilled') report.value = reportRes.value
     } catch { /* use cached */ }
   }
+})
+
+onUnmounted(() => {
+  window.removeEventListener('pos:add-item', handleCustomAddItem)
+  window.removeEventListener('pos:add-item-batch', handleCustomAddItemBatch)
+  window.removeEventListener('pos:apply-discount', handleCustomDiscount)
 })
 
 // ── Cart helpers ─────────────────────────────────────────────────────────────
@@ -446,6 +495,15 @@ function browserPrint() { window.print() }
           <strong class="line-total">{{ formatMoney(line.price_minor * line.quantity) }} {{ manifest.currency }}</strong>
         </div>
 
+        <div class="cart-subtotal" v-if="discountMinor > 0">
+          <span>Subtotal</span>
+          <span>{{ formatMoney(subtotal) }} {{ manifest.currency }}</span>
+        </div>
+        <div class="cart-discount" v-if="discountMinor > 0">
+          <span>Discount ({{ activeDiscount?.description || activeDiscount?.code }})</span>
+          <span class="discount-val">-{{ formatMoney(discountMinor) }} {{ manifest.currency }}</span>
+          <button type="button" class="remove-discount" @click="activeDiscount = null">✕</button>
+        </div>
         <div class="cart-total">
           <span>{{ t('checkout.total') }}</span>
           <strong>{{ formatMoney(total) }} {{ manifest.currency }}</strong>
@@ -488,6 +546,37 @@ function browserPrint() { window.print() }
         >
           {{ paymentMethod === 'cash' ? t('checkout.completeCash') : t('checkout.sendPrompt') }}
         </PosButton>
+      </aside>
+
+      <!-- Active Till Vertical Extensions (Retail / Pharmacy) -->
+      <aside class="sidebar-extension-panel">
+        <div class="extension-shop-switch">
+          <span class="ext-label">Till Context Options:</span>
+          <div class="ext-buttons">
+            <button
+              type="button"
+              class="ext-btn"
+              :class="{ 'active': manifest.activeShop === 'retail' }"
+              @click="manifest.setActiveShop('retail')"
+            >
+              🛒 Retail Till
+            </button>
+            <button
+              type="button"
+              class="ext-btn"
+              :class="{ 'active': manifest.activeShop === 'pharmacy' }"
+              @click="manifest.setActiveShop('pharmacy')"
+            >
+              💊 Pharmacy Till
+            </button>
+          </div>
+        </div>
+
+        <ModuleSlot
+          name="checkout.sidebar"
+          :activeModule="manifest.activeShop"
+          :slotProps="{ cart }"
+        />
       </aside>
     </div>
 
@@ -568,8 +657,15 @@ function browserPrint() { window.print() }
 .summary-card strong { font: 700 22px inherit; }
 .shift-bar { display: flex; align-items: center; gap: 12px; }
 .shift-open-badge { font-size:11px; color:#16765d; background:#e5f5ee; padding:10px 14px; border-radius:9px; }
-.commerce-grid { display:grid; grid-template-columns:minmax(0,1.5fr) minmax(300px,.8fr); gap:18px; }
+.commerce-grid { display:grid; grid-template-columns:minmax(0, 1.4fr) minmax(290px, 1fr) minmax(260px, 0.95fr); gap:18px; align-items: start; }
 .catalog-panel, .cart-panel { background:white; border:1px solid #e8ebef; border-radius:14px; padding:22px; }
+.sidebar-extension-panel { display: flex; flex-direction: column; gap: 12px; }
+.extension-shop-switch { background: white; border: 1px solid #e8ebef; border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.ext-label { font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
+.ext-buttons { display: flex; gap: 6px; }
+.ext-btn { flex: 1; padding: 8px 6px; border-radius: 6px; border: 1px solid #cbd5e1; background: #f8fafc; font-size: 12px; font-weight: 700; color: #334155; cursor: pointer; transition: all 0.15s ease; }
+.ext-btn:hover { background: #f1f5f9; border-color: #94a3b8; }
+.ext-btn.active { background: #0284c7; color: white; border-color: #0284c7; box-shadow: 0 1px 3px rgba(2, 132, 199, 0.25); }
 .panel-heading { display:flex; justify-content:space-between; align-items:center; gap:14px; margin-bottom:18px; }
 .panel-heading h2 { font-size:18px; margin:7px 0 0; }
 .catalog-actions { display:flex; align-items:center; gap:8px; }
@@ -592,6 +688,11 @@ function browserPrint() { window.print() }
 .quantity button:disabled { opacity:.4; cursor:not-allowed; }
 .line-total { margin-left:auto; white-space:nowrap; font-size:12px; color:#176c57; }
 .clear-button { background:transparent; font-size:11px; }
+.cart-subtotal, .cart-discount { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #64748b; padding-top: 6px; }
+.cart-discount { color: #166534; font-weight: 600; }
+.discount-val { color: #166534; font-weight: 700; margin-left: auto; margin-right: 8px; }
+.remove-discount { background: none; border: none; cursor: pointer; color: #94a3b8; font-size: 11px; padding: 2px 4px; border-radius: 4px; }
+.remove-discount:hover { color: #ef4444; background: #fee2e2; }
 .cart-total { display:flex; justify-content:space-between; border-top:2px solid #dfe9e5; margin-top:16px; padding-top:14px; font-size:14px; }
 .cart-total strong { font-size:20px; color:#126b55; }
 .change-line { font-size:11px; color:#7d898f; text-align:right; margin-top:8px; }
@@ -614,7 +715,14 @@ function browserPrint() { window.print() }
 .manage-row small { color:#697586; font-size:11px; }
 .manage-actions { display:flex; gap:8px; }
 /* Responsive */
-@media (max-width: 900px) { .commerce-grid { grid-template-columns:1fr; } .cart-panel { order:-1; } }
+@media (max-width: 1200px) {
+  .commerce-grid { grid-template-columns: minmax(0, 1.4fr) minmax(280px, 1fr); }
+  .sidebar-extension-panel { grid-column: 1 / -1; }
+}
+@media (max-width: 768px) {
+  .commerce-grid { grid-template-columns: 1fr; }
+  .cart-panel { order: -1; }
+}
 @media (max-width: 600px) { .summary-grid { grid-template-columns:1fr; } .catalog-actions { align-items:stretch; flex-direction:column; } .form-grid { grid-template-columns:1fr; } .line-total { display:none; } }
 @media print {
   body * { visibility:hidden!important; }

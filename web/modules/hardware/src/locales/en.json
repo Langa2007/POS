@@ -1,0 +1,20 @@
+{
+  "hardware": "Hardware & Building Supplies",
+  "multiUom": "Multi UoM",
+  "cutToLength": "Cut to Length",
+  "creditAccounts": "Credit Accounts",
+  "contractPricing": "Contract Pricing",
+  "quotes": "Quotes",
+  "delivery": "Delivery",
+  "multiUomDesc": "Sell by length, weight, area, or volume",
+  "cutToLengthDesc": "Cut materials to customer specifications",
+  "creditAccountsDesc": "Manage trade credit accounts",
+  "contractPricingDesc": "Apply contract pricing for B2B customers",
+  "quotesDesc": "Create and manage project quotes",
+  "deliveryDesc": "Schedule and track deliveries",
+  "checkoutSidebar": "Hardware Checkout Options",
+  "cutMaterial": "Cut Material",
+  "applyContract": "Apply Contract Price",
+  "createQuote": "Create Quote",
+  "scheduleDelivery": "Schedule Delivery"
+}

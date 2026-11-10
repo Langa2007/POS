@@ -1,0 +1,10 @@
+{
+  "id": "salon",
+  "name": "Salon & Spa",
+  "version": "0.1.0",
+  "capabilities": ["appointments", "commissions", "packages", "loyalty"],
+  "routes": [{"path": "/salon", "component": "SalonView"}],
+  "slots": [{"name": "checkout.sidebar", "component": "AppointmentSlot"}],
+  "nav": [{"label": "Appointments", "path": "/salon", "icon": "scissors"}],
+  "permissions": ["salon.read", "salon.manage"]
+}

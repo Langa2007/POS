@@ -1,0 +1,1 @@
+export default [{ path: '/salon', name: 'salon', component: () => import('./views/SalonView.vue'), meta: { requiresAuth: true, permission: 'salon.read' } }]

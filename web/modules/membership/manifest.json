@@ -1,0 +1,10 @@
+{
+  "id": "membership",
+  "name": "Membership",
+  "version": "0.1.0",
+  "capabilities": ["recurring_billing", "membership_plans", "attendance", "idempotent_billing"],
+  "routes": [{"path": "/membership", "component": "MembershipView"}],
+  "slots": [{"name": "customer.details", "component": "MembershipSlot"}],
+  "nav": [{"label": "Membership", "path": "/membership", "icon": "users"}],
+  "permissions": ["membership.read", "membership.manage", "membership.bill"]
+}

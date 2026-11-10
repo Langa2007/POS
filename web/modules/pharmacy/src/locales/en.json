@@ -1,0 +1,18 @@
+{
+  "pharmacy": "Pharmacy",
+  "batchTracking": "Batch Tracking",
+  "expiryTracking": "Expiry Tracking",
+  "prescriptions": "Prescriptions",
+  "controlledSubstances": "Controlled Substances",
+  "multiUom": "Multi UoM",
+  "batchTrackingDesc": "Track medication batches for traceability",
+  "expiryTrackingDesc": "Monitor expiry dates and receive alerts",
+  "prescriptionsDesc": "Process and validate prescriptions",
+  "controlledSubstancesDesc": "Manage controlled medication dispensing",
+  "multiUomDesc": "Handle multiple units of measure per item",
+  "checkoutSidebar": "Pharmacy Checkout Options",
+  "dispensePrescription": "Dispense Prescription",
+  "checkBatch": "Check Batch",
+  "verifyExpiry": "Verify Expiry",
+  "controlledSubstance": "Controlled Substance"
+}

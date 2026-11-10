@@ -1,0 +1,1 @@
+export default [{ path: '/membership', name: 'membership', component: () => import('./views/MembershipView.vue'), meta: { requiresAuth: true, permission: 'membership.read' } }]

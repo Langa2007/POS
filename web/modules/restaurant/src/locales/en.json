@@ -1,0 +1,18 @@
+{
+  "restaurant": "Restaurant",
+  "tableService": "Table Service",
+  "kitchenDisplay": "Kitchen Display",
+  "menuModifiers": "Menu Modifiers",
+  "splitBills": "Split Bills",
+  "recipes": "Recipes",
+  "tableServiceDesc": "Manage tables, seating, and table-side ordering",
+  "kitchenDisplayDesc": "Real-time kitchen order display system",
+  "menuModifiersDesc": "Customize dishes with modifiers and options",
+  "splitBillsDesc": "Split bills by item, seat, or custom amounts",
+  "recipesDesc": "Manage recipes and ingredient costs",
+  "checkoutSidebar": "Restaurant Checkout Options",
+  "openTable": "Open Table",
+  "sendToKitchen": "Send to Kitchen",
+  "modifyOrder": "Modify Order",
+  "splitBill": "Split Bill"
+}

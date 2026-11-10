@@ -1,0 +1,16 @@
+{
+  "retail": "Retail",
+  "weightedItems": "Weighed Items",
+  "promotions": "Promotions",
+  "loyalty": "Loyalty",
+  "perishables": "Perishables",
+  "weighedItemsDesc": "Sell items by weight with integrated scale support",
+  "promotionsDesc": "Create and manage promotional pricing",
+  "loyaltyDesc": "Customer loyalty points and rewards",
+  "perishablesDesc": "Track expiry dates for perishable goods",
+  "checkoutSidebar": "Retail Checkout Options",
+  "addWeightedItem": "Add Weighed Item",
+  "applyPromotion": "Apply Promotion",
+  "loyaltyPoints": "Loyalty Points",
+  "expiryWarning": "Expiry Warning"
+}

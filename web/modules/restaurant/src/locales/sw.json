@@ -1,0 +1,18 @@
+{
+  "restaurant": "Mkahawa",
+  "tableService": "Huduma ya Meza",
+  "kitchenDisplay": "Onyeshaji wa Jikoni",
+  "menuModifiers": "Mabadiliko ya Menyu",
+  "splitBills": "Gawanya Bili",
+  "recipes": "Mapishi",
+  "tableServiceDesc": "Simamia meza, ukao, na maagizo ya kando ya meza",
+  "kitchenDisplayDesc": "Mfumo wa onyeshaji wa maagizo ya jikoni kwa wakati halisi",
+  "menuModifiersDesc": "Weka vyenyewe vyakula na chaguo na chaguzi",
+  "splitBillsDesc": "Gawanya bili kwa kipengele, kiti, au kiasi kwa mahususi",
+  "recipesDesc": "Simamia mapishi na gharama za vingwa",
+  "checkoutSidebar": "Chaguo za Malipo ya Mkahawa",
+  "openTable": "Fungua Meza",
+  "sendToKitchen": "Tuma Jikonini",
+  "modifyOrder": "Badilisha Agizo",
+  "splitBill": "Gawanya Bili"
+}

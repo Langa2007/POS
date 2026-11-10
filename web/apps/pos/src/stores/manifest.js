@@ -1,12 +1,33 @@
 /**
- * Manifest store — /me/manifest response, capabilities, permissions, nav.
+ * Manifest store — /me/manifest response, capabilities, permissions, nav, and active shop mode.
  *
- * Owns: manifest data fetched after login.
+ * Supports single backend powering multiple shops (e.g. Retail Supermarket and Pharmacy Chemist).
  */
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { getMetadata, setMetadata } from '../../../../packages/offline/src/index.js'
 import { useSessionStore } from './session.js'
+
+export const AVAILABLE_SHOPS = [
+  {
+    id: 'retail',
+    name: 'Retail Supermarket',
+    badge: ' Retail Till',
+    subtitle: 'Weighed goods, promotions, customer loyalty, and shelf labels',
+    icon: '',
+    capabilities: ['weighed_items', 'promotions', 'loyalty', 'perishables'],
+    route: '/retail',
+  },
+  {
+    id: 'pharmacy',
+    name: 'Pharmacy Dispensary',
+    badge: ' Pharmacy Counter',
+    subtitle: 'Prescriptions, FEFO batches, controlled drugs, and clinical labels',
+    icon: '',
+    capabilities: ['batch_tracking', 'expiry_tracking', 'prescriptions', 'controlled_substances', 'multi_uom'],
+    route: '/pharmacy',
+  },
+]
 
 export const useManifestStore = defineStore('manifest', () => {
   const session  = useSessionStore()
@@ -15,15 +36,43 @@ export const useManifestStore = defineStore('manifest', () => {
   const manifest    = ref(null)
   const loading     = ref(false)
   const loadError   = ref('')
+  const activeShop  = ref(localStorage.getItem('pos.activeShop') || 'retail')
 
   // ── getters ───────────────────────────────────────────────────────────────
-  const businessName  = computed(() => manifest.value?.business_name ?? '')
-  const capabilities  = computed(() => manifest.value?.capabilities  ?? [])
-  const permissions   = computed(() => manifest.value?.permissions   ?? [])
+  const businessName  = computed(() => {
+    if (manifest.value?.business_name) return manifest.value.business_name
+    const shop = AVAILABLE_SHOPS.find((s) => s.id === activeShop.value)
+    return shop ? shop.name : 'POS Platform'
+  })
+
+  const currentShopInfo = computed(() => {
+    return AVAILABLE_SHOPS.find((s) => s.id === activeShop.value) || AVAILABLE_SHOPS[0]
+  })
+
+  const capabilities  = computed(() => {
+    const list = new Set(manifest.value?.capabilities ?? [])
+    const shop = AVAILABLE_SHOPS.find((s) => s.id === activeShop.value)
+    if (shop) {
+      shop.capabilities.forEach((c) => list.add(c))
+    }
+    return Array.from(list)
+  })
+
+  const permissions   = computed(() => manifest.value?.permissions ?? ['retail.read', 'retail.manage', 'pharmacy.read', 'pharmacy.dispense', 'pharmacy.manage'])
   const currency      = computed(() => manifest.value?.branch?.currency ?? 'KES')
 
-  function can(permission) { return permissions.value.includes(permission) }
+  function can(permission) { return permissions.value.includes(permission) || permissions.value.includes('*') }
   function has(capability) { return capabilities.value.includes(capability) }
+  function isModuleEnabled(id) {
+    if (activeShop.value === id) return true
+    const mods = manifest.value?.modules ?? []
+    return mods.includes(id) || mods.includes('*')
+  }
+
+  function setActiveShop(shopId) {
+    activeShop.value = shopId
+    localStorage.setItem('pos.activeShop', shopId)
+  }
 
   // ── actions ───────────────────────────────────────────────────────────────
   async function load() {
@@ -60,6 +109,22 @@ export const useManifestStore = defineStore('manifest', () => {
     loadError.value = ''
   }
 
-  return { manifest, loading, loadError, businessName, capabilities, permissions, currency, can, has, load, clear }
+  return {
+    manifest,
+    loading,
+    loadError,
+    activeShop,
+    currentShopInfo,
+    availableShops: AVAILABLE_SHOPS,
+    businessName,
+    capabilities,
+    permissions,
+    currency,
+    can,
+    has,
+    isModuleEnabled,
+    setActiveShop,
+    load,
+    clear,
+  }
 })
-

@@ -1,0 +1,22 @@
+{
+  "hospitality": "Ugostaji",
+  "roomBooking": "Udhamini wa Vumba",
+  "ratePlans": "Mipango ya Bei",
+  "guestFolio": "Folio ya Mgeni",
+  "housekeeping": "Usafi wa Vumba",
+  "nightAudit": "Uchunguzi wa Usiku",
+  "groupBilling": "Bili ya Kikundi",
+  "deposits": "Depoziti",
+  "roomBookingDesc": "Simamia miadi ya vumba na upatikanaji",
+  "ratePlansDesc": "Weka bei za msimu na za kupendekeza",
+  "guestFolioDesc": "Fuatilia gharama na malipo ya mgeni",
+  "housekeepingDesc": "Kabiliana na hali ya vumba na ratiba za usafi",
+  "nightAuditDesc": "Ulinganisho wa mwisho wa siku na ripoti",
+  "groupBillingDesc": "Bilia vumba vingi kwa akaunti moja",
+  "depositsDesc": "Simamia uchukua na marejesho ya depoziti",
+  "folioCharge": "Gharama ya Folio",
+  "addCharge": "Ongeza Gharama",
+  "viewFolio": "Tazama Folio",
+  "checkIn": "Ingia",
+  "checkOut": "Ondoka"
+}

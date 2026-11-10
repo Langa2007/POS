@@ -1,0 +1,1 @@
+export default [{ path: '/bookshop', name: 'bookshop', component: () => import('./views/BookshopView.vue'), meta: { requiresAuth: true, permission: 'bookshop.read' } }]

@@ -1,0 +1,8 @@
+{
+  "name": "@pos/module-hardware",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./src/index.js",
+  "dependencies": { "@pos/module-sdk": "workspace:*" }
+}

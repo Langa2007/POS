@@ -1,0 +1,16 @@
+{
+  "retail": "Rejea",
+  "weightedItems": "Bidhaa za Uzito",
+  "promotions": "Vipengele vya Kupendekeza",
+  "loyalty": "Uaminifu",
+  "perishables": "Bidhaa Zinazoharibiwa",
+  "weighedItemsDesc": "Uza bidhaa kwa uzito na msaada wa mizani",
+  "promotionsDesc": "Unda na uliza bei za kupendekeza",
+  "loyaltyDesc": "Pointi na zawadi za uaminifu wa wateja",
+  "perishablesDesc": "Fuatilia tarehe za uharibifu kwa bidhaa zinazoharibiwa",
+  "checkoutSidebar": "Chaguo za Malipo ya Rejea",
+  "addWeightedItem": "Ongeza Bidhaa ya Uzito",
+  "applyPromotion": "Tekeleza Kupendekeza",
+  "loyaltyPoints": "Pointi za Uaminifu",
+  "expiryWarning": "Onyo la Uharibifu"
+}
