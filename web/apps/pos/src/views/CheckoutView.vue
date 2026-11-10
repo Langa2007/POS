@@ -548,7 +548,7 @@ function browserPrint() { window.print() }
         </PosButton>
       </aside>
 
-      <!-- Active Till Vertical Extensions (Retail / Pharmacy) -->
+      <!-- Active Till Vertical Extensions -->
       <aside class="sidebar-extension-panel">
         <div class="extension-shop-switch">
           <span class="ext-label">Till Context Options:</span>
@@ -568,6 +568,22 @@ function browserPrint() { window.print() }
               @click="manifest.setActiveShop('pharmacy')"
             >
               💊 Pharmacy Till
+            </button>
+            <button
+              type="button"
+              class="ext-btn"
+              :class="{ 'active': manifest.activeShop === 'hardware' }"
+              @click="manifest.setActiveShop('hardware')"
+            >
+              🧱 Hardware Counter
+            </button>
+            <button
+              type="button"
+              class="ext-btn"
+              :class="{ 'active': manifest.activeShop === 'restaurant' }"
+              @click="manifest.setActiveShop('restaurant')"
+            >
+              🍽️ Restaurant Till
             </button>
           </div>
         </div>

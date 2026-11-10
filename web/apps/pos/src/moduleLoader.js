@@ -1,9 +1,11 @@
 import { shallowRef, ref } from 'vue'
 
-// Specifically load the 2 fully built shop modules: retail and pharmacy
+// Load the business modules currently supported by the POS shell.
 const moduleLoaders = {
   retail: () => import('../../../modules/retail/src/index.js'),
   pharmacy: () => import('../../../modules/pharmacy/src/index.js'),
+  hardware: () => import('../../../modules/hardware/src/index.js'),
+  restaurant: () => import('../../../modules/restaurant/src/index.js'),
 }
 
 const slotRegistry = ref({}) // { [slotName]: [{ moduleId, component }] }

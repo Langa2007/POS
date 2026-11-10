@@ -87,6 +87,20 @@ function switchShop(shopId) {
         >
           💊 Pharmacy Dispensary
         </RouterLink>
+        <RouterLink
+          to="/hardware"
+          class="nav-link"
+          :class="{ 'highlight': manifest.activeShop === 'hardware' }"
+        >
+          🧱 Hardware
+        </RouterLink>
+        <RouterLink
+          to="/restaurant"
+          class="nav-link"
+          :class="{ 'highlight': manifest.activeShop === 'restaurant' }"
+        >
+          🍽️ Restaurant
+        </RouterLink>
         <RouterLink :to="{ name: 'backoffice' }" class="nav-link">
           📊 {{ t('nav.reports') }}
         </RouterLink>
@@ -108,7 +122,7 @@ function switchShop(shopId) {
     </main>
 
     <footer>
-      {{ t('app.name') }} <span>•</span> Multi-Shop Single-Backend Architecture (Retail + Pharmacy) <span>•</span>
+      {{ t('app.name') }} <span>•</span> Multi-Shop Single-Backend Architecture <span>•</span>
       <button class="lang-toggle" @click="$i18n.locale = $i18n.locale === 'en' ? 'sw' : 'en'">
         {{ $i18n.locale === 'en' ? 'Kiswahili' : 'English' }}
       </button>

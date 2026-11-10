@@ -27,6 +27,24 @@ export const AVAILABLE_SHOPS = [
     capabilities: ['batch_tracking', 'expiry_tracking', 'prescriptions', 'controlled_substances', 'multi_uom'],
     route: '/pharmacy',
   },
+  {
+    id: 'hardware',
+    name: 'Hardware & Building Supplies',
+    badge: ' Hardware Counter',
+    subtitle: 'Multi-unit sales, cut-to-length materials, trade credit, and delivery',
+    icon: '',
+    capabilities: ['multi_uom', 'cut_to_length', 'credit_accounts', 'contract_pricing', 'quotes', 'delivery'],
+    route: '/hardware',
+  },
+  {
+    id: 'restaurant',
+    name: 'Restaurant & Bar',
+    badge: ' Restaurant Till',
+    subtitle: 'Table service, kitchen orders, menu modifiers, and split bills',
+    icon: '',
+    capabilities: ['table_service', 'kitchen_display', 'menu_modifiers', 'split_bills', 'recipes'],
+    route: '/restaurant',
+  },
 ]
 
 export const useManifestStore = defineStore('manifest', () => {
@@ -58,7 +76,12 @@ export const useManifestStore = defineStore('manifest', () => {
     return Array.from(list)
   })
 
-  const permissions   = computed(() => manifest.value?.permissions ?? ['retail.read', 'retail.manage', 'pharmacy.read', 'pharmacy.dispense', 'pharmacy.manage'])
+  const permissions   = computed(() => manifest.value?.permissions ?? [
+    'retail.read', 'retail.manage',
+    'pharmacy.read', 'pharmacy.dispense', 'pharmacy.manage',
+    'hardware.read', 'hardware.manage', 'hardware.credit',
+    'restaurant.read', 'restaurant.order', 'restaurant.manage',
+  ])
   const currency      = computed(() => manifest.value?.branch?.currency ?? 'KES')
 
   function can(permission) { return permissions.value.includes(permission) || permissions.value.includes('*') }
