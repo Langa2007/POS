@@ -1,273 +1,40 @@
 <template>
   <div class="pharmacy-view">
-    <!-- Top Header -->
     <header class="view-header">
-      <div class="header-main">
-        <span class="shop-badge">💊 PHARMACY DISPENSARY SUITE</span>
-        <h1>Pharmacy Dispensary & Clinical Counter</h1>
-        <p class="view-description">
-          Prescription intake, First-Expired First-Out (FEFO) batch traceability, statutory DDA Poison Book register, generic bioequivalence substitution, and clinical label generation.
-        </p>
-      </div>
-
-      <!-- Quick clinical stats -->
-      <div class="quick-kpis">
-        <div class="kpi-card">
-          <span class="kpi-label">Rx Intake Queue</span>
-          <span class="kpi-val">2 Pending</span>
-        </div>
-        <div class="kpi-card">
-          <span class="kpi-label">FEFO Near-Expiry</span>
-          <span class="kpi-val warning">3 Batches</span>
-        </div>
-        <div class="kpi-card">
-          <span class="kpi-label">Controlled Book</span>
-          <span class="kpi-val">3 DDA Entries</span>
-        </div>
-      </div>
+      <div><span class="shop-badge"><PosIcon name="pill" size="14" /> PHARMACY DISPENSARY SUITE</span><h1>Pharmacy Dispensary &amp; Clinical Counter</h1><p class="view-description">Prescription intake, batch traceability, controlled-drug records, substitutions, and clinical labels.</p></div>
+      <div class="quick-kpis"><div class="kpi-card"><span>Catalog Items</span><strong>{{ summary.catalog }}</strong></div><div class="kpi-card"><span>Prescription Queue</span><strong>{{ summary.prescriptions }}</strong></div><div class="kpi-card"><span>Near-Expiry Batches</span><strong>{{ summary.near_expiry }}</strong></div></div>
     </header>
-
-    <!-- Notification Toast if any -->
-    <div v-if="notification" class="inline-notice" :class="notification.type">
-      <span>{{ notification.message }}</span>
-      <button class="notice-close" @click="notification = null">✕</button>
-    </div>
-
-    <!-- Navigation Tabs -->
-    <nav class="pharmacy-tabs">
-      <button
-        type="button"
-        class="tab-btn"
-        :class="{ 'active': activeTab === 'prescriptions' }"
-        @click="activeTab = 'prescriptions'"
-      >
-        📋 Prescriptions & Intake
-      </button>
-      <button
-        type="button"
-        class="tab-btn"
-        :class="{ 'active': activeTab === 'batches' }"
-        @click="activeTab = 'batches'"
-      >
-        🔬 Batch Tracking & FEFO
-      </button>
-      <button
-        type="button"
-        class="tab-btn"
-        :class="{ 'active': activeTab === 'controlled' }"
-        @click="activeTab = 'controlled'"
-      >
-        🔒 Controlled Drugs Register
-      </button>
-      <button
-        type="button"
-        class="tab-btn"
-        :class="{ 'active': activeTab === 'generics' }"
-        @click="activeTab = 'generics'"
-      >
-        💊 Generic Substitution Guide
-      </button>
-      <button
-        type="button"
-        class="tab-btn"
-        :class="{ 'active': activeTab === 'labels' }"
-        @click="activeTab = 'labels'"
-      >
-        🏷️ Clinical Dispensing Labels
-      </button>
-    </nav>
-
-    <!-- Tab Panels -->
+    <div v-if="notification" class="inline-notice" :class="notification.type"><PosIcon name="info" size="15" /><span>{{ notification.message }}</span><button @click="notification = null"><PosIcon name="x" size="14" /></button></div>
+    <nav class="pharmacy-tabs"><button v-for="tab in tabs" :key="tab.id" type="button" class="tab-btn" :class="{ active: activeTab === tab.id }" @click="activeTab = tab.id"><PosIcon :name="tab.icon" size="16" />{{ tab.label }}</button></nav>
     <main class="tab-content-panel">
-      <!-- 1. Prescriptions & Dispensing -->
-      <section v-if="activeTab === 'prescriptions'">
-        <PrescriptionStation
-          @add-item="handleAddItem"
-          @notification="showNotice"
-        />
-      </section>
-
-      <!-- 2. Batch & FEFO Engine -->
-      <section v-if="activeTab === 'batches'">
-        <BatchFefoManager
-          @notification="showNotice"
-        />
-      </section>
-
-      <!-- 3. Controlled Substances Register -->
-      <section v-if="activeTab === 'controlled'">
-        <ControlledDrugsRegister
-          @add-item="handleAddItem"
-          @notification="showNotice"
-        />
-      </section>
-
-      <!-- 4. Generic Substitution -->
-      <section v-if="activeTab === 'generics'">
-        <GenericSubstitutionFinder
-          @add-item="handleAddItem"
-          @notification="showNotice"
-        />
-      </section>
-
-      <!-- 5. Clinical Labels -->
-      <section v-if="activeTab === 'labels'">
-        <DispensingLabelGenerator
-          @notification="showNotice"
-        />
-      </section>
+      <PrescriptionStation v-if="activeTab === 'prescriptions'" @add-item="handleAddItem" @notification="showNotice" />
+      <BatchFefoManager v-else-if="activeTab === 'batches'" @notification="showNotice" />
+      <ControlledDrugsRegister v-else-if="activeTab === 'controlled'" @add-item="handleAddItem" @notification="showNotice" />
+      <GenericSubstitutionFinder v-else-if="activeTab === 'generics'" @add-item="handleAddItem" @notification="showNotice" />
+      <DispensingLabelGenerator v-else @notification="showNotice" />
     </main>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
+import { PosIcon } from '@pos/ui'
+import { useApi } from '../../../../apps/pos/src/composables/useApi.js'
 import PrescriptionStation from '../components/PrescriptionStation.vue'
 import BatchFefoManager from '../components/BatchFefoManager.vue'
 import ControlledDrugsRegister from '../components/ControlledDrugsRegister.vue'
 import GenericSubstitutionFinder from '../components/GenericSubstitutionFinder.vue'
 import DispensingLabelGenerator from '../components/DispensingLabelGenerator.vue'
-
+const api = useApi()
 const activeTab = ref('prescriptions')
 const notification = ref(null)
-
-function showNotice(payload) {
-  notification.value = payload
-  setTimeout(() => {
-    if (notification.value === payload) {
-      notification.value = null
-    }
-  }, 5000)
-}
-
-function handleAddItem(item) {
-  try {
-    const existingCart = JSON.parse(localStorage.getItem('pos.retailCartPending') || '[]')
-    existingCart.push(item)
-    localStorage.setItem('pos.retailCartPending', JSON.stringify(existingCart))
-    window.dispatchEvent(new CustomEvent('pos:add-item', { detail: item }))
-  } catch (e) {
-    console.error(e)
-  }
-  showNotice({
-    message: `Dispensed "${item.name}" (KES ${(item.price_minor / 100).toFixed(2)}) to active cart.`,
-    type: 'success',
-  })
-}
+const summary = ref({ catalog: 0, prescriptions: 0, near_expiry: 0 })
+const tabs = [{ id: 'prescriptions', label: 'Prescriptions & Intake', icon: 'clipboard-list' }, { id: 'batches', label: 'Batch Tracking & FEFO', icon: 'layers' }, { id: 'controlled', label: 'Controlled Drugs Register', icon: 'lock' }, { id: 'generics', label: 'Generic Substitution', icon: 'pill' }, { id: 'labels', label: 'Dispensing Labels', icon: 'tag' }]
+onMounted(async () => { try { const [catalog, prescriptions, batches] = await Promise.all([api.get('/api/v1/pharmacy/catalog'), api.get('/api/v1/pharmacy/prescriptions'), api.get('/api/v1/pharmacy/batches')]); summary.value = { catalog: catalog.items?.length ?? 0, prescriptions: prescriptions.items?.length ?? 0, near_expiry: batches.items?.filter(item => item.days_left > 0 && item.days_left <= 60).length ?? 0 } } catch { showNotice({ message: 'Pharmacy summary is unavailable. Please contact your administrator.', type: 'error' }) } })
+function showNotice(payload) { notification.value = payload; setTimeout(() => { if (notification.value === payload) notification.value = null }, 5000) }
+function handleAddItem(item) { window.dispatchEvent(new CustomEvent('pos:add-item', { detail: item })); showNotice({ message: 'Item added to the active sale', type: 'success' }) }
 </script>
 
 <style scoped>
-.pharmacy-view {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
-.view-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  flex-wrap: wrap;
-  gap: 1rem;
-  border-bottom: 1px solid #e2e8f0;
-  padding-bottom: 1.25rem;
-}
-.shop-badge {
-  font-size: 0.75rem;
-  letter-spacing: 0.08em;
-  font-weight: 800;
-  color: #0369a1;
-  background: #e0f2fe;
-  padding: 0.2rem 0.6rem;
-  border-radius: 4px;
-  display: inline-block;
-  margin-bottom: 0.5rem;
-}
-.header-main h1 {
-  margin: 0 0 0.4rem;
-  font-size: 1.85rem;
-  font-weight: 800;
-  color: #0f172a;
-}
-.view-description {
-  margin: 0;
-  color: #64748b;
-  font-size: 0.95rem;
-  max-width: 680px;
-  line-height: 1.5;
-}
-.quick-kpis {
-  display: flex;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-}
-.kpi-card {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  padding: 0.75rem 1rem;
-  border-radius: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  min-width: 120px;
-}
-.kpi-label {
-  font-size: 0.75rem;
-  color: #64748b;
-  font-weight: 600;
-}
-.kpi-val {
-  font-size: 1.15rem;
-  font-weight: 800;
-  color: #0f172a;
-}
-.kpi-val.warning {
-  color: #d97706;
-}
-.inline-notice {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0.75rem 1.25rem;
-  border-radius: 8px;
-  font-weight: 600;
-  font-size: 0.9rem;
-}
-.inline-notice.success { background: #dcfce7; color: #166534; border: 1px solid #86efac; }
-.inline-notice.warning { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
-.inline-notice.info { background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
-.notice-close { background: none; border: none; font-size: 1.1rem; cursor: pointer; color: inherit; }
-.pharmacy-tabs {
-  display: flex;
-  gap: 0.5rem;
-  border-bottom: 2px solid #e2e8f0;
-  overflow-x: auto;
-  padding-bottom: 2px;
-}
-.tab-btn {
-  background: none;
-  border: none;
-  padding: 0.75rem 1.15rem;
-  font-size: 0.95rem;
-  font-weight: 700;
-  color: #64748b;
-  cursor: pointer;
-  border-radius: 8px 8px 0 0;
-  transition: all 0.15s ease;
-  white-space: nowrap;
-}
-.tab-btn:hover {
-  color: #0284c7;
-  background: #f1f5f9;
-}
-.tab-btn.active {
-  color: #0284c7;
-  background: #f0f9ff;
-  border-bottom: 3px solid #0284c7;
-}
-.tab-content-panel {
-  background: #fff;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 1.5rem;
-}
+.pharmacy-view{display:flex;flex-direction:column;gap:1.5rem}.view-header{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:1rem;border-bottom:1px solid #e2e8f0;padding-bottom:1.25rem}.shop-badge{display:inline-flex;align-items:center;gap:5px;font-size:.75rem;letter-spacing:.08em;font-weight:800;color:#0369a1;background:#e0f2fe;padding:.2rem .6rem;border-radius:4px}.header-main h1{margin:.5rem 0 .4rem;font-size:1.85rem;color:#0f172a}.view-description{margin:0;color:#64748b;font-size:.95rem;max-width:680px}.quick-kpis{display:flex;gap:.75rem;flex-wrap:wrap}.kpi-card{background:#f8fafc;border:1px solid #e2e8f0;padding:.75rem 1rem;border-radius:8px;display:flex;flex-direction:column;gap:.25rem;min-width:120px}.kpi-card span{font-size:.75rem;color:#64748b}.kpi-card strong{font-size:1.15rem;color:#0f172a}.inline-notice{display:flex;align-items:center;gap:8px;padding:.75rem 1.25rem;border-radius:8px;font-size:.9rem}.inline-notice.success{background:#dcfce7;color:#166534}.inline-notice.error{background:#fee2e2;color:#991b1b}.inline-notice button{margin-left:auto;border:0;background:transparent;color:inherit;cursor:pointer}.pharmacy-tabs{display:flex;gap:.5rem;border-bottom:2px solid #e2e8f0;overflow-x:auto}.tab-btn{display:inline-flex;align-items:center;gap:7px;background:none;border:0;padding:.75rem 1.15rem;font-size:.95rem;font-weight:700;color:#64748b;cursor:pointer;white-space:nowrap}.tab-btn.active{color:#0284c7;border-bottom:2px solid #0284c7}.tab-content-panel{min-height:400px}
 </style>
