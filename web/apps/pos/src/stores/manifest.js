@@ -28,6 +28,24 @@ export const AVAILABLE_SHOPS = [
     route: '/pharmacy',
   },
   {
+    id: 'fuelstation',
+    name: 'Fuel Station',
+    badge: ' Fuel Operations',
+    subtitle: 'Pump shifts, tank dips, and meter reconciliation',
+    icon: '',
+    capabilities: ['pump_integration', 'tank_dips', 'meter_shifts', 'pump_reconciliation'],
+    route: '/fuelstation',
+  },
+  {
+    id: 'garage',
+    name: 'Garage Workshop',
+    badge: ' Workshop',
+    subtitle: 'Vehicle job cards, parts, labor, and service follow-up',
+    icon: '',
+    capabilities: ['job_cards', 'parts_and_labor', 'service_reminders', 'appointments'],
+    route: '/garage',
+  },
+  {
     id: 'hardware',
     name: 'Hardware & Building Supplies',
     badge: ' Hardware Counter',
@@ -101,6 +119,8 @@ export const useManifestStore = defineStore('manifest', () => {
     'restaurant.read', 'restaurant.order', 'restaurant.manage',
     'bookshop.read', 'bookshop.manage', 'bookshop.returns',
     'salon.read', 'salon.manage',
+    'fuelstation.read', 'fuelstation.manage', 'fuelstation.reconcile',
+    'garage.read', 'garage.manage',
   ])
   const currency      = computed(() => manifest.value?.branch?.currency ?? 'KES')
 

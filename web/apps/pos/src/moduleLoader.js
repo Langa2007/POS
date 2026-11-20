@@ -8,6 +8,8 @@ const moduleLoaders = {
   restaurant: () => import('../../../modules/restaurant/src/index.js'),
   bookshop: () => import('../../../modules/bookshop/src/index.js'),
   salon: () => import('../../../modules/salon/src/index.js'),
+  fuelstation: () => import('../../../modules/fuelstation/src/index.js'),
+  garage: () => import('../../../modules/garage/src/index.js'),
 }
 
 const slotRegistry = ref({}) // { [slotName]: [{ moduleId, component }] }
