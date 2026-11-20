@@ -1,12 +1,12 @@
 <template>
   <section class="manager"><header><div><h3>Workshop appointments</h3><p>Plan workshop capacity with vehicle, service type, technician and bay allocation.</p></div></header><p v-if="conflict" class="conflict">{{ conflict }}</p>
     <form class="form" @submit.prevent="submit"><label>Customer<input v-model.trim="form.customer" required /></label><label>Vehicle / registration<input v-model.trim="form.vehicle" required /></label><label>Service required<input v-model.trim="form.service" required placeholder="Brake inspection" /></label><label>Technician / bay<input v-model.trim="form.technician" /></label><label>Start time<input v-model="form.start" type="datetime-local" required /></label><label>Duration<select v-model.number="form.duration"><option :value="30">30 minutes</option><option :value="60">1 hour</option><option :value="90">1.5 hours</option><option :value="120">2 hours</option><option :value="240">4 hours</option></select></label><button class="primary">Book workshop slot</button></form>
-    <div class="cards"><article v-for="item in sorted" :key="item.id" :class="item.status"><div class="time">{{ format(item.start) }}</div><div class="info"><strong>{{ item.service }} · {{ item.vehicle }}</strong><span>{{ item.customer }} · {{ item.technician || 'Technician unassigned' }}</span></div><select v-model="item.status"><option>Booked</option><option>Arrived</option><option>In service</option><option>Completed</option><option>Cancelled</option><option>No show</option></select></article><div v-if="!sorted.length" class="empty">No workshop bookings yet.</div></div>
+    <div class="cards"><article v-for="item in sorted" :key="item.id" :class="item.status"><div class="time">{{ format(item.start) }}</div><div class="info"><strong>{{ item.service }} · {{ item.vehicle }}</strong><span>{{ item.customer }} · {{ item.technician || 'Technician unassigned' }}</span></div><select :value="item.status" @change="$emit('update-status',{id:item.id,status:$event.target.value})"><option>Booked</option><option>Arrived</option><option>In service</option><option>Completed</option><option>Cancelled</option><option>No show</option></select></article><div v-if="!sorted.length" class="empty">No workshop bookings yet.</div></div>
   </section>
 </template>
 <script setup>
 import { computed, reactive, ref } from 'vue'
-const props=defineProps({appointments:{type:Array,default:()=>[]}});const emit=defineEmits(['create'])
+const props=defineProps({appointments:{type:Array,default:()=>[]}});const emit=defineEmits(['create','update-status'])
 const form=reactive({customer:'',vehicle:'',service:'',technician:'',start:'',duration:60});const conflict=ref('')
 const sorted=computed(()=>[...props.appointments].sort((a,b)=>a.start.localeCompare(b.start)))
 function format(value){return new Date(value).toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'})}

@@ -184,6 +184,15 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/v1/salon/staff", s.requireAuth(s.requirePermission("salon.read", http.HandlerFunc(s.listSalonStaff))))
 	mux.Handle("GET /api/v1/salon/dashboard", s.requireAuth(s.requirePermission("salon.read", http.HandlerFunc(s.salonDashboard))))
 	mux.Handle("GET /api/v1/salon/commissions", s.requireAuth(s.requirePermission("salon.read", http.HandlerFunc(s.listSalonCommissions))))
+	for _, vertical := range []string{"fuelstation", "garage"} {
+		readPermission := vertical + ".read"
+		managePermission := vertical + ".manage"
+		mux.Handle("GET /api/v1/"+vertical+"/{resource}", s.requireAuth(s.requirePermission(readPermission, http.HandlerFunc(s.listVerticalOperationRecords))))
+		mux.Handle("POST /api/v1/"+vertical+"/{resource}", s.requireAuth(s.requirePermission(managePermission, http.HandlerFunc(s.createVerticalOperationRecord))))
+		mux.Handle("PATCH /api/v1/"+vertical+"/{resource}/{recordID}", s.requireAuth(s.requirePermission(managePermission, http.HandlerFunc(s.updateVerticalOperationRecord))))
+		mux.Handle("DELETE /api/v1/"+vertical+"/{resource}/{recordID}", s.requireAuth(s.requirePermission(managePermission, http.HandlerFunc(s.deleteVerticalOperationRecord))))
+	}
+	mux.Handle("POST /api/v1/fuelstation/shifts", s.requireAuth(s.requirePermission("fuelstation.reconcile", http.HandlerFunc(s.createVerticalOperationRecord))))
 	mux.Handle("GET /api/v1/demo/hello", s.requireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]string{"message": "hello from demo vertical"})
 	})))
