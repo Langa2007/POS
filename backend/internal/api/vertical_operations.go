@@ -30,6 +30,8 @@ var verticalResources = map[string]map[string][]string{
 	},
 }
 
+var errTechnicianAppointmentConflict = errors.New("technician already has an appointment during this time")
+
 func (s *Server) listVerticalOperationRecords(w http.ResponseWriter, r *http.Request) {
 	vertical, resource, ok := verticalResourcePath(r)
 	if !ok {
@@ -116,10 +118,26 @@ func (s *Server) createVerticalOperationRecord(w http.ResponseWriter, r *http.Re
 		return
 	}
 	err = s.db.TenantTx(r.Context(), scope.TenantID, func(tx pgx.Tx) error {
+		if vertical == "garage" && resource == "appointments" {
+			if err := lockAppointmentTechnician(r, tx, scope.TenantID, input); err != nil {
+				return err
+			}
+			conflict, err := appointmentConflicts(r, tx, scope.TenantID, input, "")
+			if err != nil {
+				return err
+			}
+			if conflict {
+				return errTechnicianAppointmentConflict
+			}
+		}
 		_, err := tx.Exec(r.Context(), `INSERT INTO vertical_operation_records(id,tenant_id,vertical_id,resource,data) VALUES($1,$2,$3,$4,$5::jsonb)`, id, scope.TenantID, vertical, resource, string(data))
 		return err
 	})
 	if err != nil {
+		if errors.Is(err, errTechnicianAppointmentConflict) {
+			writeError(w, http.StatusConflict, "appointment.technician_conflict", "Technician already has an appointment during this time")
+			return
+		}
 		s.logger.Error("create vertical record", "tenant_id", scope.TenantID, "vertical", vertical, "resource", resource, "error", err)
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && (pgErr.Code == "23505" || pgErr.Code == "23P01") {
@@ -159,6 +177,32 @@ func (s *Server) updateVerticalOperationRecord(w http.ResponseWriter, r *http.Re
 	}
 	var raw []byte
 	err = s.db.TenantTx(r.Context(), scope.TenantID, func(tx pgx.Tx) error {
+		if vertical == "garage" && resource == "appointments" {
+			var currentJSON []byte
+			if err := tx.QueryRow(r.Context(), `SELECT data FROM vertical_operation_records WHERE tenant_id=$1 AND vertical_id=$2 AND resource=$3 AND id=$4 FOR UPDATE`, scope.TenantID, vertical, resource, r.PathValue("recordID")).Scan(&currentJSON); err != nil {
+				return err
+			}
+			candidate := map[string]any{}
+			if err := json.Unmarshal(currentJSON, &candidate); err != nil {
+				return err
+			}
+			for key, value := range patch {
+				candidate[key] = value
+			}
+			if err := validateVerticalRecord(vertical, resource, candidate, false); err != nil {
+				return fmt.Errorf("invalid appointment update: %w", err)
+			}
+			if err := lockAppointmentTechnician(r, tx, scope.TenantID, candidate); err != nil {
+				return err
+			}
+			conflict, err := appointmentConflicts(r, tx, scope.TenantID, candidate, r.PathValue("recordID"))
+			if err != nil {
+				return err
+			}
+			if conflict {
+				return errTechnicianAppointmentConflict
+			}
+		}
 		return tx.QueryRow(r.Context(), `UPDATE vertical_operation_records SET data=data || $1::jsonb, updated_at=now() WHERE tenant_id=$2 AND vertical_id=$3 AND resource=$4 AND id=$5 RETURNING data`, string(data), scope.TenantID, vertical, resource, r.PathValue("recordID")).Scan(&raw)
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -166,6 +210,14 @@ func (s *Server) updateVerticalOperationRecord(w http.ResponseWriter, r *http.Re
 		return
 	}
 	if err != nil {
+		if errors.Is(err, errTechnicianAppointmentConflict) {
+			writeError(w, http.StatusConflict, "appointment.technician_conflict", "Technician already has an appointment during this time")
+			return
+		}
+		if strings.HasPrefix(err.Error(), "invalid appointment update:") {
+			writeError(w, http.StatusBadRequest, "appointment.update_invalid", err.Error())
+			return
+		}
 		s.logger.Error("update vertical record", "tenant_id", scope.TenantID, "vertical", vertical, "resource", resource, "error", err)
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23P01" {
@@ -179,6 +231,37 @@ func (s *Server) updateVerticalOperationRecord(w http.ResponseWriter, r *http.Re
 	_ = json.Unmarshal(raw, &result)
 	result["id"] = r.PathValue("recordID")
 	writeJSON(w, http.StatusOK, result)
+}
+
+func lockAppointmentTechnician(r *http.Request, tx pgx.Tx, tenantID string, record map[string]any) error {
+	technician, _ := record["technician"].(string)
+	if strings.TrimSpace(technician) == "" {
+		return nil
+	}
+	_, err := tx.Exec(r.Context(), `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, tenantID+":"+technician)
+	return err
+}
+
+func appointmentConflicts(r *http.Request, tx pgx.Tx, tenantID string, record map[string]any, excludeID string) (bool, error) {
+	technician, _ := record["technician"].(string)
+	status, _ := record["status"].(string)
+	if strings.TrimSpace(technician) == "" || status == "Cancelled" || status == "Completed" || status == "No show" {
+		return false, nil
+	}
+	start, _ := record["start"].(string)
+	end, _ := record["end"].(string)
+	var conflict bool
+	err := tx.QueryRow(r.Context(), `
+		SELECT EXISTS (
+			SELECT 1 FROM vertical_operation_records
+			WHERE tenant_id=$1 AND vertical_id='garage' AND resource='appointments'
+			  AND data->>'technician'=$2
+			  AND ($3='' OR id::text<>$3)
+			  AND COALESCE(data->>'status','Booked') NOT IN ('Cancelled','Completed','No show')
+			  AND (data->>'start')::timestamptz < $4::timestamptz
+			  AND (data->>'end')::timestamptz > $5::timestamptz
+		)`, tenantID, technician, excludeID, end, start).Scan(&conflict)
+	return conflict, err
 }
 
 func (s *Server) deleteVerticalOperationRecord(w http.ResponseWriter, r *http.Request) {

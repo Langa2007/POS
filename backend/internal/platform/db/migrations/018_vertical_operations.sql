@@ -17,19 +17,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS garage_vehicle_registration_unique
     ON vertical_operation_records (tenant_id, upper(data->>'registration'))
     WHERE vertical_id='garage' AND resource='vehicles';
 
-ALTER TABLE vertical_operation_records
-    DROP CONSTRAINT IF EXISTS garage_technician_appointment_no_overlap;
-ALTER TABLE vertical_operation_records
-    ADD CONSTRAINT garage_technician_appointment_no_overlap
-    EXCLUDE USING gist (
-        tenant_id WITH =,
-        (data->>'technician') WITH =,
-        tstzrange((data->>'start')::timestamptz, (data->>'end')::timestamptz, '[)') WITH &&
-    ) WHERE (
-        vertical_id='garage' AND resource='appointments'
-        AND COALESCE(data->>'technician', '') <> ''
-        AND COALESCE(data->>'status', 'Booked') NOT IN ('Cancelled', 'Completed', 'No show')
-    );
+CREATE INDEX IF NOT EXISTS garage_appointment_technician_lookup
+    ON vertical_operation_records (tenant_id, (data->>'technician'))
+    WHERE vertical_id='garage' AND resource='appointments';
 
 ALTER TABLE vertical_operation_records ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS vertical_operation_records_tenant_isolation ON vertical_operation_records;
