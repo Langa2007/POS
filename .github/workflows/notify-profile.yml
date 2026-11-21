@@ -1,0 +1,21 @@
+
+name: Notify Profile Language Statistics
+
+on:
+  push:
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Trigger profile update
+        env:
+          GH_STATS_TOKEN: ${{ secrets.GH_STATS_TOKEN }}
+        run: |
+          curl --fail-with-body --request POST \
+            --url https://api.github.com/repos/Langa2007/Langa2007/dispatches \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer $GH_STATS_TOKEN" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            --data '{"event_type":"update-language-stats"}'
