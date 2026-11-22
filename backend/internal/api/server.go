@@ -184,7 +184,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/v1/salon/staff", s.requireAuth(s.requirePermission("salon.read", http.HandlerFunc(s.listSalonStaff))))
 	mux.Handle("GET /api/v1/salon/dashboard", s.requireAuth(s.requirePermission("salon.read", http.HandlerFunc(s.salonDashboard))))
 	mux.Handle("GET /api/v1/salon/commissions", s.requireAuth(s.requirePermission("salon.read", http.HandlerFunc(s.listSalonCommissions))))
-	for _, vertical := range []string{"fuelstation", "garage"} {
+	for _, vertical := range []string{"hardware", "bookshop", "hospitality", "dealership", "membership", "fuelstation", "garage"} {
 		readPermission := vertical + ".read"
 		managePermission := vertical + ".manage"
 		mux.Handle("GET /api/v1/"+vertical+"/{resource}", s.requireAuth(s.requirePermission(readPermission, http.HandlerFunc(s.listVerticalOperationRecords))))

@@ -16,6 +16,44 @@ import (
 )
 
 var verticalResources = map[string]map[string][]string{
+	"hardware": {
+		"uoms":            {"name", "base_unit", "factor"},
+		"cuts":            {"item", "requested_length", "operator"},
+		"credit_accounts": {"customer", "limit", "terms"},
+		"quotes":          {"customer", "items", "valid_until"},
+		"deliveries":      {"customer", "address", "status"},
+	},
+	"bookshop": {
+		"books":         {"isbn", "title", "author", "publisher"},
+		"orders":        {"customer", "isbn", "status"},
+		"consignments":  {"supplier", "isbn", "quantity", "terms"},
+		"returns":       {"supplier", "isbn", "quantity", "reason"},
+		"school_orders": {"school", "items", "delivery_date"},
+	},
+	"hospitality": {
+		"rooms":        {"number", "room_type", "status"},
+		"reservations": {"guest", "room", "check_in", "check_out", "status"},
+		"rate_plans":   {"name", "room_type", "nightly_rate"},
+		"folios":       {"guest", "room", "balance"},
+		"housekeeping": {"room", "status", "assigned_to"},
+		"night_audits": {"date", "status", "variance"},
+		"deposits":     {"guest", "reservation", "amount"},
+	},
+	"dealership": {
+		"vehicles":     {"registration", "serial", "make", "model"},
+		"warranties":   {"vehicle", "provider", "expires"},
+		"trade_ins":    {"customer", "vehicle", "allowance"},
+		"installments": {"customer", "vehicle", "deposit", "balance"},
+		"deposits":     {"customer", "vehicle", "amount"},
+		"documents":    {"vehicle", "type", "reference"},
+	},
+	"membership": {
+		"plans":      {"name", "price", "period"},
+		"members":    {"name", "plan", "status"},
+		"attendance": {"member", "entered", "location"},
+		"billing":    {"member", "amount", "period", "status"},
+		"freezes":    {"member", "start", "end", "reason"},
+	},
 	"fuelstation": {
 		"pumps":      {"pump", "grade", "product"},
 		"shifts":     {"pump", "operator", "open", "close", "sales"},

@@ -115,6 +115,10 @@ function switchShop(shopId) {
         >
           ✨ Salon
         </RouterLink>
+        <RouterLink to="/hospitality" class="nav-link">🛏️ Hospitality</RouterLink>
+        <RouterLink to="/dealership" class="nav-link">🚗 Dealership</RouterLink>
+        <RouterLink to="/membership" class="nav-link">👥 Membership</RouterLink>
+        <RouterLink to="/demo" class="nav-link">🧪 Demo</RouterLink>
         <RouterLink :to="{ name: 'backoffice' }" class="nav-link">
           📊 {{ t('nav.reports') }}
         </RouterLink>

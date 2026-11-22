@@ -10,6 +10,10 @@ const moduleLoaders = {
   salon: () => import('../../../modules/salon/src/index.js'),
   fuelstation: () => import('../../../modules/fuelstation/src/index.js'),
   garage: () => import('../../../modules/garage/src/index.js'),
+  hospitality: () => import('../../../modules/hospitality/src/index.js'),
+  dealership: () => import('../../../modules/dealership/src/index.js'),
+  membership: () => import('../../../modules/membership/src/index.js'),
+  demo: () => import('../../../modules/demo/src/index.js'),
 }
 
 const slotRegistry = ref({}) // { [slotName]: [{ moduleId, component }] }

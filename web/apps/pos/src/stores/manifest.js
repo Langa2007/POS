@@ -81,6 +81,42 @@ export const AVAILABLE_SHOPS = [
     capabilities: ['appointments', 'commissions', 'packages', 'loyalty'],
     route: '/salon',
   },
+  {
+    id: 'hospitality',
+    name: 'Hotel & Hospitality',
+    badge: ' Hospitality',
+    subtitle: 'Rooms, reservations, guest folios, housekeeping, and night audits',
+    icon: '',
+    capabilities: ['room_booking', 'rate_plans', 'guest_folio', 'housekeeping', 'night_audit', 'group_billing', 'deposits'],
+    route: '/hospitality',
+  },
+  {
+    id: 'dealership',
+    name: 'Vehicle Dealership',
+    badge: ' Dealership',
+    subtitle: 'Serial tracking, warranties, trade-ins, installments, and documents',
+    icon: '',
+    capabilities: ['serial_tracking', 'warranty', 'trade_ins', 'installments', 'deposits', 'document_packs'],
+    route: '/dealership',
+  },
+  {
+    id: 'membership',
+    name: 'Membership',
+    badge: ' Membership',
+    subtitle: 'Plans, member billing, attendance, freezes, and renewals',
+    icon: '',
+    capabilities: ['recurring_billing', 'membership_plans', 'attendance', 'idempotent_billing'],
+    route: '/membership',
+  },
+  {
+    id: 'demo',
+    name: 'Demo Vertical',
+    badge: ' Demo',
+    subtitle: 'Reference module for extension and module contract testing',
+    icon: '',
+    capabilities: ['demo.toy'],
+    route: '/demo',
+  },
 ]
 
 export const useManifestStore = defineStore('manifest', () => {
@@ -121,6 +157,10 @@ export const useManifestStore = defineStore('manifest', () => {
     'salon.read', 'salon.manage',
     'fuelstation.read', 'fuelstation.manage', 'fuelstation.reconcile',
     'garage.read', 'garage.manage',
+    'hospitality.read', 'hospitality.manage', 'hospitality.audit',
+    'dealership.read', 'dealership.manage', 'dealership.finance',
+    'membership.read', 'membership.manage', 'membership.bill',
+    'demo.read',
   ])
   const currency      = computed(() => manifest.value?.branch?.currency ?? 'KES')
 
