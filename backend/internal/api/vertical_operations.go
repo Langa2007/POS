@@ -48,11 +48,13 @@ var verticalResources = map[string]map[string][]string{
 		"documents":    {"vehicle", "type", "reference"},
 	},
 	"membership": {
-		"plans":      {"name", "price", "period"},
-		"members":    {"name", "plan", "status"},
-		"attendance": {"member", "entered", "location"},
-		"billing":    {"member", "amount", "period", "status"},
-		"freezes":    {"member", "start", "end", "reason"},
+		"plans":       {"name", "price", "period"},
+		"members":     {"name", "email", "phone", "plan", "status"},
+		"attendance":  {"member", "entered", "location"},
+		"billing":     {"member", "amount", "period", "status"},
+		"freezes":     {"member", "start", "end", "reason"},
+		"renewals":    {"member", "plan", "period", "due_date", "status"},
+		"access_logs": {"member", "location", "accessed", "result"},
 	},
 	"fuelstation": {
 		"pumps":      {"pump", "grade", "product"},
