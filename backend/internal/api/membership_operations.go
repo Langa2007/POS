@@ -64,7 +64,6 @@ func (s *Server) runMembershipBilling(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "membership.billing_invalid", "Provide a valid billing period")
 		return
 	}
-	request.Period = request.Period
 	if request.Period == "" {
 		request.Period = time.Now().UTC().Format("2006-01")
 	}
